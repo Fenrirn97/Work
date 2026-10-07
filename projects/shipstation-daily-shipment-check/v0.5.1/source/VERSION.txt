@@ -1,0 +1,3 @@
+ShipStation Daily Shipment Check v0.5.1
+Build date: 2026-09-29
+Primary feature: Shipments -> Label Printed status + displayed print date/time capture

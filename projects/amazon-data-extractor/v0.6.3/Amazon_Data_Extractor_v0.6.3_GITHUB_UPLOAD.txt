@@ -1,0 +1,5029 @@
+===== BEGIN FILE: .gitignore =====
+
+.venv/
+__pycache__/
+*.pyc
+output/
+brightdata_api_key.txt
+
+===== END FILE: .gitignore =====
+
+===== BEGIN FILE: CODE_MAP.md =====
+
+# Code map — v0.6.3
+
+## Web workflow
+
+`app.py`
+
+- Serves the two-tab local interface.
+- Runs live extraction.
+- Runs offline comparison.
+- Serves generated downloads.
+- Schedules the local process exit.
+
+## Input readers
+
+- `asin_reader.py` validates and deduplicates the ASIN upload.
+- `offline_reader.py` reads `Amazon Data` and recovers accepted ASINs from
+  `Input Audit`.
+- `catalog_reader.py` locates ASIN, SKU, Product Name, and Bullet Point 1–5 in
+  Amazon Category Listings reports. It discovers the worksheet instead of
+  assuming a sheet named `Products`.
+- `all_listings.py` reads the optional All Listings TXT as an ASIN/SKU bridge.
+
+## Live collection
+
+- `brightdata_client.py` makes Bright Data requests.
+- `live_records.py` classifies each requested ASIN as Found, Redirected,
+  Not Found, or Extraction Failed.
+- `exporter.py` writes the raw response and `amazon_extraction.xlsx`.
+
+## Comparison
+
+- `comparator.py` performs one-to-one bullet matching and assigns the six
+  v0.6.3 classifications. It also resolves blank ASINs by SKU, unique product
+  name, and user-entered ASIN.
+- `comparison_report.py` creates `comparison_report.xlsx`.
+
+## Rule that protects comparisons
+
+Only a `Found` result for the requested ASIN reaches bullet comparison.
+Redirected, missing, and failed live results go to `Live Extraction Problems`.
+An existing catalog ASIN is never replaced by a fallback identifier.
+
+===== END FILE: CODE_MAP.md =====
+
+===== BEGIN FILE: README.md =====
+
+# Amazon Data Extractor v0.6.3
+
+This local Windows program has two separate tabs.
+
+## 1. Live Extraction
+
+1. Upload an `.xlsx` workbook containing an ASIN column.
+2. The program validates and deduplicates the ASINs.
+3. Bright Data reads the public Amazon product pages.
+4. Download `amazon_extraction.xlsx`.
+
+The Bright Data key is read from `brightdata_api_key.txt` or the
+`BRIGHTDATA_API_KEY` environment variable. The key file is empty in this package.
+
+## 2. Offline Compare
+
+1. Upload `amazon_extraction.xlsx` from the Live Extraction tab.
+2. Upload the Amazon Category Listings Report (`.xlsx` or `.xlsm`).
+3. Optionally add the All Listings Report (`.txt` or `.tsv`) for SKU fallback.
+4. If catalog rows still have no ASIN, the program pauses and asks you. Each row
+   shows its identifier type and number, SKU, and product name.
+5. Enter the known ASINs or leave them blank, then download
+   `comparison_report.xlsx`.
+
+The offline tab makes no Bright Data or Amazon network call. It recovers the
+original requested ASINs from the extraction workbook's `Input Audit` sheet.
+
+Product matching is attempted in this order:
+
+1. Requested ASIN.
+2. Returned ASIN.
+3. SKU through the optional All Listings Report.
+4. Unique normalized product name.
+5. ASIN entered by the user on the confirmation screen.
+
+An ASIN already present in the Category Listings Report is never overwritten.
+Rows left unresolved are preserved on the `ASIN Needed` sheet with their
+original identifier number.
+
+## Bullet classifications
+
+- **Exact Match** — identical text in the same position.
+- **Formatting Only** — normalized content is the same, but capitalization,
+  punctuation, spacing, HTML, quotes, or similar presentation differs.
+- **Text Changed** — both positions contain different content.
+- **Missing Live** — the catalog has a bullet and the live result does not.
+- **Missing Catalog** — the live result has a bullet and the catalog does not.
+- **Bullet Moved** — the same normalized bullet is present at another position.
+
+Redirected, missing, and failed live products are reported but never compared.
+
+## Comparison report
+
+- `ASIN Issues` is the short product-level review list.
+- `Bullet Results` includes every classification, including exact matches.
+- `Difference Details` contains review-only rows. Its first two columns are
+  `ASIN` and `Product Name`, directly beside each other.
+- `ASIN Needed` preserves unresolved identifier type/number, SKU, product name,
+  and source catalog row.
+- `Not Found in Catalog` and `Live Extraction Problems` explain unmatched or
+  unusable live results.
+- `Read Me` defines the classifications and product-matching order.
+
+## Start on Windows
+
+1. Install Python 3.11 or newer.
+2. Extract the entire ZIP; do not run it from inside the ZIP.
+3. Double-click `START.bat`.
+4. The first start creates `.venv` and installs Flask and openpyxl.
+5. Use `http://127.0.0.1:5050` if the browser does not open automatically.
+6. Press **Exit Program** when finished. Python stops and the command window
+   closes naturally.
+
+The original uploaded workbooks are never modified.
+
+===== END FILE: README.md =====
+
+===== BEGIN FILE: SETUP.bat =====
+
+@echo off
+setlocal
+cd /d "%~dp0"
+
+where py >nul 2>nul
+if not errorlevel 1 (
+    set "PYTHON_COMMAND=py -3"
+) else (
+    set "PYTHON_COMMAND=python"
+)
+
+%PYTHON_COMMAND% --version >nul 2>nul
+if errorlevel 1 (
+    echo Python 3.11 or newer is required.
+    echo Download it from https://www.python.org/downloads/
+    if /I not "%~1"=="/quiet" pause
+    exit /b 1
+)
+
+if not exist ".venv\Scripts\python.exe" (
+    echo Creating the local Python environment...
+    %PYTHON_COMMAND% -m venv .venv
+    if errorlevel 1 goto :setup_failed
+)
+
+echo Installing required packages...
+".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
+if errorlevel 1 goto :setup_failed
+
+echo Setup complete.
+if /I not "%~1"=="/quiet" pause
+exit /b 0
+
+:setup_failed
+echo Setup failed. Review the message above.
+if /I not "%~1"=="/quiet" pause
+exit /b 1
+
+===== END FILE: SETUP.bat =====
+
+===== BEGIN FILE: START.bat =====
+
+@echo off
+setlocal
+cd /d "%~dp0"
+
+if not exist ".venv\Scripts\python.exe" (
+    call SETUP.bat /quiet
+    if errorlevel 1 (
+        echo The program could not be set up.
+        pause
+        exit /b 1
+    )
+)
+
+start "" http://127.0.0.1:5050
+".venv\Scripts\python.exe" app.py
+
+if errorlevel 1 (
+    echo.
+    echo Amazon Data Extractor stopped because of an error.
+    pause
+)
+
+endlocal
+
+===== END FILE: START.bat =====
+
+===== BEGIN FILE: VERSION.txt =====
+
+0.6.3
+
+===== END FILE: VERSION.txt =====
+
+===== BEGIN FILE: app.py =====
+
+"""Amazon Data Extractor v0.6.3.
+
+The web app keeps two jobs separate:
+1. Live Extraction asks Bright Data for public Amazon product information.
+2. Offline Compare compares a saved extraction with a Category Listings Report.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+import re
+import sys
+import tempfile
+import threading
+
+
+ASSET_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+PROJECT_DIR = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent
+)
+if (ASSET_DIR / "src").is_dir():
+    sys.path.insert(0, str(ASSET_DIR / "src"))
+
+
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
+from werkzeug.utils import secure_filename
+
+from amazon_data_extractor.asin_reader import InputWorkbookError, read_asins
+from amazon_data_extractor.brightdata_client import BrightDataClient, BrightDataError
+from amazon_data_extractor.cli import _append_error_log
+from amazon_data_extractor.catalog_reader import clean_asin
+from amazon_data_extractor.comparator import prepare_comparison, write_prepared_comparison
+from amazon_data_extractor.exporter import write_outputs
+from amazon_data_extractor.live_records import build_live_results
+from amazon_data_extractor.offline_reader import (
+    OfflineWorkbookError,
+    read_offline_extraction,
+)
+
+
+APP_VERSION = "0.6.3"
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+RUN_ID_PATTERN = re.compile(
+    r"^amazon_(?:extraction|comparison)_\d{8}_\d{6}(?:_\d+)?$"
+)
+PENDING_EXTRACTION = "_pending_extraction.xlsx"
+PENDING_CATALOG_STEM = "_pending_catalog"
+PENDING_ALL_LISTINGS = "_pending_all_listings.txt"
+
+
+def load_api_key(project_dir: Path) -> str:
+    """Read the Bright Data key from the environment or the local TXT file."""
+    api_key = os.getenv("BRIGHTDATA_API_KEY", "").strip()
+    key_file = project_dir / "brightdata_api_key.txt"
+    if not api_key and key_file.is_file():
+        api_key = key_file.read_text(encoding="utf-8-sig").strip()
+    return api_key.removeprefix("Bearer ").strip()
+
+
+def choose_mode(selected_mode: str, asin_count: int) -> str:
+    """Automatic mode uses sync for small jobs and async for larger jobs."""
+    selected_mode = (selected_mode or "Automatic").strip()
+    if selected_mode == "Automatic":
+        return "sync" if asin_count <= 20 else "async"
+    if selected_mode == "Synchronous":
+        return "sync"
+    if selected_mode == "Asynchronous":
+        return "async"
+    raise ValueError("Unknown extraction mode.")
+
+
+def new_run_directory(
+    output_dir: Path,
+    started_at: datetime,
+    *,
+    prefix: str,
+) -> tuple[str, Path]:
+    """Create a unique run name without overwriting an earlier run."""
+    base_name = f"{prefix}_{started_at.strftime('%Y%m%d_%H%M%S')}"
+    run_name = base_name
+    number = 2
+    while (output_dir / run_name).exists():
+        run_name = f"{base_name}_{number}"
+        number += 1
+    return run_name, output_dir / run_name
+
+
+def save_temporary_upload(upload, suffix: str) -> Path:
+    """Save one browser upload temporarily so the workbook readers can open it."""
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+        upload.save(temp_file)
+        return Path(temp_file.name)
+
+
+def delete_temporary_files(*paths: Path | None) -> None:
+    for path in paths:
+        if path is None:
+            continue
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def pending_catalog_path(run_dir: Path) -> Path | None:
+    for suffix in (".xlsx", ".xlsm"):
+        candidate = run_dir / f"{PENDING_CATALOG_STEM}{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def cleanup_pending_inputs(run_dir: Path) -> None:
+    """Remove staged uploads after the comparison is finished."""
+    paths = [
+        run_dir / PENDING_EXTRACTION,
+        run_dir / PENDING_ALL_LISTINGS,
+        run_dir / f"{PENDING_CATALOG_STEM}.xlsx",
+        run_dir / f"{PENDING_CATALOG_STEM}.xlsm",
+    ]
+    delete_temporary_files(*paths)
+
+
+def collect_amazon_records(
+    client: BrightDataClient,
+    asins: list[str],
+    mode: str,
+) -> list[dict]:
+    if mode == "sync":
+        return client.collect_sync(asins)
+    snapshot_id = client.trigger_collection(asins)
+    client.wait_until_ready(snapshot_id)
+    return client.download_results(snapshot_id)
+
+
+def extraction_preview(records: list[dict]) -> list[dict]:
+    """Keep the browser preview small even when the extraction is large."""
+    return [
+        {
+            "asin": record.get("asin") or record.get("input_asin") or "",
+            "title": record.get("title") or "",
+            "price": record.get("final_price") or record.get("initial_price") or "",
+            "availability": record.get("availability") or "",
+            "seller": record.get("seller_name") or record.get("buybox_seller") or "",
+        }
+        for record in records[:100]
+    ]
+
+
+def live_result_summary(records: list[dict], requested_asins: list[str]) -> dict:
+    """Give the user a direct explanation of missing, failed, or redirected ASINs."""
+    live_results = build_live_results(records, requested_asins)
+    counts = {"Found": 0, "Redirected": 0, "Not Found": 0, "Extraction Failed": 0}
+    problems = []
+    for asin in requested_asins:
+        result = live_results.get(asin)
+        if result is None:
+            continue
+        counts[result.status] = counts.get(result.status, 0) + 1
+        if result.status != "Found":
+            problems.append(result)
+    return {"counts": counts, "problems": problems}
+
+
+def close_program() -> None:
+    """End the local Flask/Python process immediately."""
+    os._exit(0)
+
+
+def schedule_program_exit(delay_seconds: float = 0.75) -> None:
+    """Let the browser receive its final page before ending Python."""
+    exit_timer = threading.Timer(delay_seconds, close_program)
+    exit_timer.daemon = True
+    exit_timer.start()
+
+
+def create_app(config: dict | None = None) -> Flask:
+    app = Flask(
+        __name__,
+        template_folder=str(ASSET_DIR / "templates"),
+        static_folder=str(ASSET_DIR / "static"),
+    )
+    app.config.update(
+        SECRET_KEY=os.urandom(32),
+        PROJECT_DIR=PROJECT_DIR,
+        MAX_CONTENT_LENGTH=MAX_UPLOAD_BYTES,
+        EXIT_SCHEDULER=schedule_program_exit,
+    )
+    if config:
+        app.config.update(config)
+
+    @app.context_processor
+    def common_context():
+        return {"version": APP_VERSION}
+
+    @app.get("/")
+    def index():
+        project_dir = Path(app.config["PROJECT_DIR"])
+        return render_template("index.html", key_found=bool(load_api_key(project_dir)))
+
+    @app.post("/extract")
+    def extract():
+        asin_upload = request.files.get("workbook")
+        if asin_upload is None or not asin_upload.filename:
+            flash("Choose an ASIN Excel workbook first.", "error")
+            return redirect(url_for("index", tab="live"))
+
+        asin_filename = secure_filename(asin_upload.filename) or "input.xlsx"
+        if Path(asin_filename).suffix.lower() != ".xlsx":
+            flash("The ASIN input must be an .xlsx Excel workbook.", "error")
+            return redirect(url_for("index", tab="live"))
+
+        project_dir = Path(app.config["PROJECT_DIR"])
+        output_dir = project_dir / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        asin_temp = None
+
+        try:
+            asin_temp = save_temporary_upload(asin_upload, ".xlsx")
+            asin_result = read_asins(asin_temp)
+            if not asin_result.asins:
+                raise InputWorkbookError("No valid ASINs were found in the workbook.")
+
+            mode = choose_mode(
+                request.form.get("mode", "Automatic"),
+                len(asin_result.asins),
+            )
+            if mode == "sync" and len(asin_result.asins) > 20:
+                raise BrightDataError("Synchronous mode supports at most 20 ASINs.")
+
+            api_key = load_api_key(project_dir)
+            if not api_key:
+                flash(
+                    "No API key found. Add it to brightdata_api_key.txt or set BRIGHTDATA_API_KEY.",
+                    "error",
+                )
+                return redirect(url_for("index", tab="live"))
+
+            started_at = datetime.now(timezone.utc)
+            run_name, run_dir = new_run_directory(
+                output_dir,
+                started_at,
+                prefix="amazon_extraction",
+            )
+            records = collect_amazon_records(
+                BrightDataClient(api_key),
+                asin_result.asins,
+                mode,
+            )
+            metadata = {
+                "app_version": APP_VERSION,
+                "source_workbook": asin_filename,
+                "mode": mode,
+                "returned_record_count": len(records),
+                "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+            }
+            raw_path, workbook_path, metadata_path = write_outputs(
+                run_dir,
+                records=records,
+                audit_rows=asin_result.audit_rows,
+                metadata=metadata,
+            )
+            return render_template(
+                "results.html",
+                run_name=run_name,
+                source_workbook=asin_filename,
+                sheet_name=asin_result.sheet_name,
+                asin_count=len(asin_result.asins),
+                invalid_count=asin_result.invalid_count,
+                duplicate_count=asin_result.duplicate_count,
+                mode=mode,
+                record_count=len(records),
+                preview=extraction_preview(records),
+                live_summary=live_result_summary(records, asin_result.asins),
+                workbook_name=workbook_path.name,
+                raw_name=raw_path.name,
+                metadata_name=metadata_path.name,
+            )
+        except InputWorkbookError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("index", tab="live"))
+        except BrightDataError as exc:
+            started_at = datetime.now(timezone.utc)
+            run_name, _run_dir = new_run_directory(
+                output_dir,
+                started_at,
+                prefix="amazon_extraction",
+            )
+            try:
+                error_log = _append_error_log(
+                    output_dir,
+                    run_name=run_name,
+                    input_file=Path(asin_filename),
+                    asin_count=len(asin_result.asins) if "asin_result" in locals() else 0,
+                    error=exc,
+                )
+                flash(f"{exc} Error log: {error_log}", "error")
+            except OSError:
+                flash(str(exc), "error")
+            return redirect(url_for("index", tab="live"))
+        except (OSError, ValueError) as exc:
+            flash(f"Could not process the workbook: {exc}", "error")
+            return redirect(url_for("index", tab="live"))
+        finally:
+            delete_temporary_files(asin_temp)
+
+    @app.post("/compare")
+    def compare_offline():
+        extraction_upload = request.files.get("extraction_workbook")
+        catalog_upload = request.files.get("catalog_workbook")
+        all_listings_upload = request.files.get("all_listings_file")
+        if extraction_upload is None or not extraction_upload.filename:
+            flash("Choose amazon_extraction.xlsx first.", "error")
+            return redirect(url_for("index", tab="offline"))
+        if catalog_upload is None or not catalog_upload.filename:
+            flash("Choose a Category Listings Report.", "error")
+            return redirect(url_for("index", tab="offline"))
+
+        extraction_filename = (
+            secure_filename(extraction_upload.filename) or "amazon_extraction.xlsx"
+        )
+        catalog_filename = (
+            secure_filename(catalog_upload.filename) or "category_listings.xlsm"
+        )
+        all_listings_filename = (
+            secure_filename(all_listings_upload.filename)
+            if all_listings_upload and all_listings_upload.filename
+            else ""
+        )
+        if Path(extraction_filename).suffix.lower() != ".xlsx":
+            flash("The saved Amazon extraction must be an .xlsx workbook.", "error")
+            return redirect(url_for("index", tab="offline"))
+        if Path(catalog_filename).suffix.lower() not in {".xlsx", ".xlsm"}:
+            flash("The Category Listings Report must be .xlsx or .xlsm.", "error")
+            return redirect(url_for("index", tab="offline"))
+        if (
+            all_listings_filename
+            and Path(all_listings_filename).suffix.lower() not in {".txt", ".tsv"}
+        ):
+            flash("The optional All Listings Report must be .txt or .tsv.", "error")
+            return redirect(url_for("index", tab="offline"))
+
+        project_dir = Path(app.config["PROJECT_DIR"])
+        output_dir = project_dir / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        started_at = datetime.now(timezone.utc)
+        run_name, run_dir = new_run_directory(
+            output_dir,
+            started_at,
+            prefix="amazon_comparison",
+        )
+        run_dir.mkdir(parents=True, exist_ok=False)
+        extraction_path = run_dir / PENDING_EXTRACTION
+        catalog_path = run_dir / (
+            f"{PENDING_CATALOG_STEM}{Path(catalog_filename).suffix.lower()}"
+        )
+        all_listings_path = (
+            run_dir / PENDING_ALL_LISTINGS if all_listings_filename else None
+        )
+
+        try:
+            extraction_upload.save(extraction_path)
+            catalog_upload.save(catalog_path)
+            if all_listings_path is not None:
+                all_listings_upload.save(all_listings_path)
+
+            offline = read_offline_extraction(extraction_path)
+            prepared = prepare_comparison(
+                records=offline.records,
+                requested_asins=offline.requested_asins,
+                catalog_path=catalog_path,
+                all_listings_path=all_listings_path,
+            )
+
+            if prepared.unresolved_catalog:
+                return render_template(
+                    "resolve_asins.html",
+                    run_name=run_name,
+                    unresolved=prepared.unresolved_catalog,
+                    extraction_name=extraction_filename,
+                    catalog_name=catalog_filename,
+                    all_listings_name=all_listings_filename,
+                    automatic_stats=prepared.resolution_stats,
+                    entered_values={},
+                )
+
+            comparison_path = run_dir / "comparison_report.xlsx"
+            comparison_stats = write_prepared_comparison(prepared, comparison_path)
+            cleanup_pending_inputs(run_dir)
+            return render_template(
+                "offline_results.html",
+                run_name=run_name,
+                extraction_name=extraction_filename,
+                catalog_name=catalog_filename,
+                requested_count=len(offline.requested_asins),
+                record_count=len(offline.records),
+                comparison_name=comparison_path.name,
+                comparison_stats=comparison_stats,
+            )
+        except (OfflineWorkbookError, OSError, ValueError) as exc:
+            cleanup_pending_inputs(run_dir)
+            flash(f"Offline comparison failed: {exc}", "error")
+            return redirect(url_for("index", tab="offline"))
+
+    @app.post("/compare/<run_name>/resolve")
+    def resolve_asins(run_name: str):
+        if not RUN_ID_PATTERN.fullmatch(run_name):
+            abort(404)
+
+        project_dir = Path(app.config["PROJECT_DIR"])
+        run_dir = project_dir / "output" / run_name
+        extraction_path = run_dir / PENDING_EXTRACTION
+        catalog_path = pending_catalog_path(run_dir)
+        all_listings_path = run_dir / PENDING_ALL_LISTINGS
+        if not extraction_path.is_file() or catalog_path is None:
+            abort(404)
+
+        manual_resolutions: dict[int, str] = {}
+        entered_values: dict[int, str] = {}
+        invalid_rows: list[int] = []
+        for field_name, raw_value in request.form.items():
+            match = re.fullmatch(r"asin_(\d+)", field_name)
+            if not match:
+                continue
+            source_row = int(match.group(1))
+            entered = raw_value.strip().upper()
+            entered_values[source_row] = entered
+            if not entered:
+                continue
+            asin = clean_asin(entered)
+            if not asin:
+                invalid_rows.append(source_row)
+            else:
+                manual_resolutions[source_row] = asin
+
+        extraction_name = (
+            secure_filename(request.form.get("extraction_name", ""))
+            or "amazon_extraction.xlsx"
+        )
+        catalog_name = (
+            secure_filename(request.form.get("catalog_name", ""))
+            or "category_listings.xlsx"
+        )
+        all_listings_name = secure_filename(request.form.get("all_listings_name", ""))
+
+        try:
+            offline = read_offline_extraction(extraction_path)
+            prepared = prepare_comparison(
+                records=offline.records,
+                requested_asins=offline.requested_asins,
+                catalog_path=catalog_path,
+                all_listings_path=(
+                    all_listings_path if all_listings_path.is_file() else None
+                ),
+                manual_resolutions=None if invalid_rows else manual_resolutions,
+            )
+            if invalid_rows:
+                return render_template(
+                    "resolve_asins.html",
+                    run_name=run_name,
+                    unresolved=prepared.unresolved_catalog,
+                    extraction_name=extraction_name,
+                    catalog_name=catalog_name,
+                    all_listings_name=all_listings_name,
+                    automatic_stats=prepared.resolution_stats,
+                    entered_values=entered_values,
+                    validation_error=(
+                        "Enter a 10-character ASIN containing only letters and numbers "
+                        f"for catalog row(s): {', '.join(map(str, invalid_rows))}."
+                    ),
+                ), 400
+
+            comparison_path = run_dir / "comparison_report.xlsx"
+            comparison_stats = write_prepared_comparison(prepared, comparison_path)
+            cleanup_pending_inputs(run_dir)
+            return render_template(
+                "offline_results.html",
+                run_name=run_name,
+                extraction_name=extraction_name,
+                catalog_name=catalog_name,
+                requested_count=len(offline.requested_asins),
+                record_count=len(offline.records),
+                comparison_name=comparison_path.name,
+                comparison_stats=comparison_stats,
+            )
+        except (OfflineWorkbookError, OSError, ValueError) as exc:
+            flash(f"Offline comparison failed: {exc}", "error")
+            return redirect(url_for("index", tab="offline"))
+
+    @app.get("/download/<run_name>/<kind>")
+    def download(run_name: str, kind: str):
+        if not RUN_ID_PATTERN.fullmatch(run_name):
+            abort(404)
+        downloads = {
+            "excel": (
+                "amazon_extraction.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+            "comparison": (
+                "comparison_report.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+            "json": ("brightdata_raw.json", "application/json"),
+            "metadata": ("run_metadata.json", "application/json"),
+        }
+        if kind not in downloads:
+            abort(404)
+        filename, mimetype = downloads[kind]
+        path = Path(app.config["PROJECT_DIR"]) / "output" / run_name / filename
+        if not path.is_file():
+            abort(404)
+        return send_file(path, as_attachment=True, download_name=filename, mimetype=mimetype)
+
+    @app.post("/exit")
+    def exit_program():
+        if request.remote_addr not in {"127.0.0.1", "::1"}:
+            abort(403)
+        app.config["EXIT_SCHEDULER"]()
+        return render_template("closed.html")
+
+    @app.errorhandler(413)
+    def file_too_large(_error):
+        return render_template(
+            "error.html",
+            title="File too large",
+            message="The combined upload is larger than 25 MB.",
+        ), 413
+
+    return app
+
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5050, debug=False, threaded=True)
+
+===== END FILE: app.py =====
+
+===== BEGIN FILE: pyproject.toml =====
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amazon-data-extractor"
+version = "0.6.3"
+description = "Local Bright Data extraction and offline Amazon bullet comparison"
+requires-python = ">=3.11"
+dependencies = [
+  "Flask>=3.0,<4",
+  "openpyxl>=3.1,<4",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+===== END FILE: pyproject.toml =====
+
+===== BEGIN FILE: requirements.txt =====
+
+Flask>=3.0,<4
+openpyxl>=3.1,<4
+
+===== END FILE: requirements.txt =====
+
+===== BEGIN FILE: run_extractor.py =====
+
+"""PyInstaller entry point for the standalone Windows executable."""
+
+
+from amazon_data_extractor.cli import main
+
+
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+===== END FILE: run_extractor.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/__init__.py =====
+
+"""Amazon Data Extractor package."""
+
+
+__version__ = "0.6.3"
+
+===== END FILE: src/amazon_data_extractor/__init__.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/__main__.py =====
+
+from .cli import main
+
+
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+===== END FILE: src/amazon_data_extractor/__main__.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/all_listings.py =====
+
+"""Use Amazon's All Listings TXT as an optional ASIN-to-SKU bridge."""
+
+from __future__ import annotations
+
+import csv
+from dataclasses import dataclass
+from pathlib import Path
+
+from .catalog_reader import clean_asin, clean_text, normalize_header, sku_key
+
+
+@dataclass(frozen=True)
+class AllListingsIndex:
+    asin_to_skus: dict[str, list[str]]
+    sku_to_asin: dict[str, str]
+    row_count: int
+
+
+def load_all_listings(path: str | Path) -> AllListingsIndex:
+    path = Path(path)
+    if not path.is_file():
+        raise ValueError("All Listings TXT file was not found.")
+
+    last_error: Exception | None = None
+    for encoding in ("utf-8-sig", "utf-8", "cp1252"):
+        try:
+            with path.open("r", encoding=encoding, newline="") as file_handle:
+                reader = csv.DictReader(file_handle, delimiter="\t")
+                if not reader.fieldnames:
+                    raise ValueError("All Listings TXT has no header row.")
+
+                headers = {
+                    normalize_header(header): header
+                    for header in reader.fieldnames
+                    if header
+                }
+                sku_column = headers.get("seller sku") or headers.get("sku")
+                asin_column = headers.get("asin1") or headers.get("asin")
+                if not sku_column or not asin_column:
+                    raise ValueError(
+                        "All Listings TXT must contain seller-sku and asin1 columns."
+                    )
+
+                asin_to_skus: dict[str, list[str]] = {}
+                sku_to_asin: dict[str, str] = {}
+                row_count = 0
+                for row in reader:
+                    sku = clean_text(row.get(sku_column))
+                    if not sku:
+                        continue
+                    row_count += 1
+                    asin = clean_asin(row.get(asin_column))
+                    if not asin:
+                        continue
+                    key = sku_key(sku)
+                    sku_to_asin[key] = asin
+                    bucket = asin_to_skus.setdefault(asin, [])
+                    if key not in {sku_key(existing) for existing in bucket}:
+                        bucket.append(sku)
+
+                return AllListingsIndex(asin_to_skus, sku_to_asin, row_count)
+        except UnicodeDecodeError as exc:
+            last_error = exc
+
+    raise ValueError(f"Could not read All Listings TXT: {last_error}")
+
+===== END FILE: src/amazon_data_extractor/all_listings.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/asin_reader.py =====
+
+"""Read and validate Amazon ASINs from Excel workbooks."""
+
+
+from __future__ import annotations
+
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
+
+
+from openpyxl import load_workbook
+
+
+
+
+ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10}$")
+AMAZON_URL_PATTERNS = (
+    re.compile(r"/(?:dp|gp/product|product)/([A-Z0-9]{10})(?:[/?#]|$)", re.I),
+    re.compile(r"[?&]asin=([A-Z0-9]{10})(?:[&#]|$)", re.I),
+)
+DEFAULT_COLUMN_ALIASES = (
+    "asin",
+    "child asin",
+    "amazon asin",
+    "product asin",
+)
+
+
+
+
+class InputWorkbookError(ValueError):
+    """Raised when the workbook cannot provide a usable ASIN column."""
+
+
+
+
+@dataclass(frozen=True)
+class AsinAuditRow:
+    source_row: int
+    original_value: str
+    normalized_asin: str
+    status: str
+    message: str
+
+
+
+
+@dataclass(frozen=True)
+class AsinReadResult:
+    asins: list[str]
+    audit_rows: list[AsinAuditRow]
+    sheet_name: str
+    column_name: str
+
+
+    @property
+    def invalid_count(self) -> int:
+        return sum(row.status == "INVALID" for row in self.audit_rows)
+
+
+    @property
+    def duplicate_count(self) -> int:
+        return sum(row.status == "DUPLICATE" for row in self.audit_rows)
+
+
+
+
+def _normalize_header(value: object) -> str:
+    return " ".join(str(value or "").strip().lower().replace("_", " ").split())
+
+
+
+
+def extract_asin(value: object) -> str | None:
+    """Return a normalized ASIN from a cell value or Amazon URL."""
+
+
+    if value is None:
+        return None
+
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+
+    normalized = text.upper()
+    if ASIN_PATTERN.fullmatch(normalized):
+        return normalized
+
+
+    for pattern in AMAZON_URL_PATTERNS:
+        match = pattern.search(text)
+        if match:            return match.group(1).upper()
+
+
+    return None
+
+
+
+
+def _find_column(headers: Iterable[object], requested_column: str | None) -> tuple[int, str]:
+    header_list = list(headers)
+    normalized_headers = [_normalize_header(value) for value in header_list]
+
+
+    candidates = (requested_column,) if requested_column else DEFAULT_COLUMN_ALIASES
+    for candidate in candidates:
+        normalized_candidate = _normalize_header(candidate)
+        if normalized_candidate in normalized_headers:
+            index = normalized_headers.index(normalized_candidate)
+            return index, str(header_list[index]).strip()
+
+
+    available = [str(value).strip() for value in header_list if value not in (None, "")]
+    requested = requested_column or "ASIN / Child ASIN"
+    raise InputWorkbookError(
+        f"Could not find column '{requested}'. Available columns: "
+        + (", ".join(available) if available else "none")
+    )
+
+
+
+
+def read_asins(
+    workbook_path: str | Path,
+    *,
+    sheet_name: str | None = None,
+    column_name: str | None = None,
+    header_row: int = 1,
+) -> AsinReadResult:
+    """Read unique valid ASINs and return an audit trail for populated rows."""
+
+
+    path = Path(workbook_path)
+    if not path.is_file():
+        raise InputWorkbookError(f"Excel file not found: {path}")
+    if path.suffix.lower() != ".xlsx":
+        raise InputWorkbookError("The input must be an .xlsx Excel workbook.")
+    if header_row < 1:
+        raise InputWorkbookError("Header row must be 1 or greater.")
+
+
+    try:
+        workbook = load_workbook(path, read_only=True, data_only=True)
+    except Exception as exc:
+        raise InputWorkbookError(f"Could not open the Excel workbook: {exc}") from exc
+
+
+    try:
+        if sheet_name:
+            if sheet_name not in workbook.sheetnames:
+                raise InputWorkbookError(
+                    f"Worksheet '{sheet_name}' was not found. Available worksheets: "
+                    + ", ".join(workbook.sheetnames)
+                )
+            worksheet = workbook[sheet_name]
+        else:
+            worksheet = workbook.active
+
+
+        header_values = next(
+            worksheet.iter_rows(
+                min_row=header_row,
+                max_row=header_row,
+                values_only=True,
+            ),
+            (),
+        )
+        column_index, actual_column_name = _find_column(header_values, column_name)
+
+
+        accepted: list[str] = []
+        audit_rows: list[AsinAuditRow] = []
+        seen: set[str] = set()
+
+
+        for row_number, row in enumerate(
+            worksheet.iter_rows(min_row=header_row + 1, values_only=True),
+            start=header_row + 1,
+        ):
+            if not any(value not in (None, "") for value in row):
+                continue
+
+
+            value = row[column_index] if column_index < len(row) else None
+            original = "" if value is None else str(value).strip()
+            asin = extract_asin(value)
+
+
+            if not original:
+                audit_rows.append(
+                    AsinAuditRow(row_number, original, "", "INVALID", "ASIN cell is blank")
+                )
+            elif asin is None:
+                audit_rows.append(
+                    AsinAuditRow(
+                        row_number,
+                        original,
+                        "",
+                        "INVALID",
+                        "Expected a 10-character ASIN or Amazon product URL",
+                    )
+                )
+            elif asin in seen:
+                audit_rows.append(
+                    AsinAuditRow(
+                        row_number,
+                        original,
+                        asin,
+                        "DUPLICATE",
+                        "Already accepted from an earlier row",
+                    )
+                )
+            else:
+                seen.add(asin)
+                accepted.append(asin)
+                audit_rows.append(AsinAuditRow(row_number, original, asin, "ACCEPTED", ""))
+
+
+        return AsinReadResult(
+            asins=accepted,
+            audit_rows=audit_rows,
+            sheet_name=worksheet.title,
+            column_name=actual_column_name,
+        )
+    finally:
+        workbook.close()
+
+===== END FILE: src/amazon_data_extractor/asin_reader.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/brightdata_client.py =====
+
+"""Small Bright Data asynchronous API client using the Python standard library."""
+
+
+from __future__ import annotations
+
+
+import json
+import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+
+
+
+DEFAULT_DATASET_ID = "gd_l7q7dkf244hwjntr0"
+DEFAULT_BASE_URL = "https://api.brightdata.com/datasets/v3"
+IN_PROGRESS_STATUSES = {"starting", "running", "collecting", "digesting"}
+TERMINAL_FAILURE_STATUSES = {"failed", "canceled", "cancelled"}
+TRANSIENT_HTTP_STATUSES = {429, 500, 502, 503, 504}
+
+
+
+
+class BrightDataError(RuntimeError):
+    """Raised for a Bright Data API or collection failure."""
+
+
+
+
+@dataclass(frozen=True)
+class SnapshotProgress:
+    snapshot_id: str
+    status: str
+    response: dict[str, Any]
+
+
+
+
+class BrightDataClient:
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        dataset_id: str = DEFAULT_DATASET_ID,
+        base_url: str = DEFAULT_BASE_URL,
+        request_timeout: float = 60.0,
+        retry_attempts: int = 3,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        if not api_key or not api_key.strip():
+            raise BrightDataError("A Bright Data API key is required.")
+        self._api_key = api_key.strip()
+        self.dataset_id = dataset_id
+        self.base_url = base_url.rstrip("/")
+        self.request_timeout = request_timeout
+        self.retry_attempts = max(1, retry_attempts)
+        self._sleep = sleep
+
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "amazon-data-extractor/0.4.1",
+        }
+
+
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, object] | None = None,
+        payload: object | None = None,
+    ) -> Any:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        if query:
+            url = f"{url}?{urlencode(query)}"
+
+
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        request = Request(url, data=body, headers=self._headers, method=method)
+
+
+        for attempt in range(1, self.retry_attempts + 1):
+            try:
+                with urlopen(request, timeout=self.request_timeout) as response:
+                    response_body = response.read().decode("utf-8-sig")
+                    if not response_body:
+                        return None
+                    return json.loads(response_body)
+            except HTTPError as exc:
+                error_body = exc.read().decode("utf-8", errors="replace")
+                if exc.code in TRANSIENT_HTTP_STATUSES and attempt < self.retry_attempts:
+                    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                    delay = float(retry_after) if retry_after and retry_after.isdigit() else 2**attempt
+                    self._sleep(delay)
+                    continue
+                message = _extract_error_message(error_body) or exc.reason or "HTTP error"
+                raw_body = error_body.strip()
+                if raw_body and raw_body != message:
+                    message = f"{message} | response: {raw_body[:1000]}"
+                raise BrightDataError(f"Bright Data returned HTTP {exc.code}: {message}") from exc
+            except URLError as exc:
+                if attempt < self.retry_attempts:
+                    self._sleep(2**attempt)
+                    continue
+                raise BrightDataError(f"Could not reach Bright Data: {exc.reason}") from exc
+            except json.JSONDecodeError as exc:
+                raise BrightDataError("Bright Data returned a response that was not valid JSON.") from exc
+
+
+        raise BrightDataError("Bright Data request failed after all retry attempts.")
+
+
+    def trigger_collection(
+        self,
+        asins: Sequence[str],
+        *,
+        language: str = "EN",
+        zipcode: str | None = None,
+    ) -> str:
+        if not asins:
+            raise BrightDataError("At least one ASIN is required.")
+
+
+        # Bright Data's documented asynchronous Amazon endpoint accepts URL
+        # objects. The scraper's dashboard exposes additional CSV columns, but
+        # those fields are not part of the documented /trigger request body and
+        # can cause HTTP 400 responses. The exact child-ASIN URL is sufficient
+        # for this extractor and keeps one submitted URL mapped to one child.
+        payload = [{"url": f"https://www.amazon.com/dp/{asin}"} for asin in asins]
+
+
+        response = self._request_json(
+            "POST",
+            "trigger",
+            query={
+                "dataset_id": self.dataset_id,
+                "format": "json",
+            },
+            payload=payload,
+        )
+        if not isinstance(response, dict) or not response.get("snapshot_id"):
+            raise BrightDataError("Bright Data did not return a snapshot ID.")
+        return str(response["snapshot_id"])
+
+
+    def collect_sync(
+        self,
+        asins: Sequence[str],
+    ) -> list[dict[str, Any]]:
+        """Collect up to 20 product URLs using Bright Data's sync endpoint."""
+        if not asins:
+            raise BrightDataError("At least one ASIN is required.")
+        if len(asins) > 20:
+            raise BrightDataError(
+                "Synchronous Bright Data requests support at most 20 ASINs; "
+                "use asynchronous mode for larger batches."
+            )
+
+
+        payload = {
+            "input": [{"url": f"https://www.amazon.com/dp/{asin}"} for asin in asins]
+        }
+        response = self._request_json(
+            "POST",
+            "scrape",
+            query={
+                "dataset_id": self.dataset_id,
+                "include_errors": "true",
+                "format": "json",
+            },
+            payload=payload,
+        )
+        if isinstance(response, dict) and response.get("snapshot_id"):
+            raise BrightDataError(
+                "Bright Data synchronous request timed out; snapshot ID: "
+                f"{response['snapshot_id']}. Use asynchronous mode to retrieve it."
+            )
+        if not isinstance(response, list) or not all(
+            isinstance(record, dict) for record in response
+        ):
+            raise BrightDataError(
+                "Bright Data sync response was not a JSON record list. "
+                f"Response type: {type(response).__name__}."
+            )
+        return response
+
+
+    def get_progress(self, snapshot_id: str) -> SnapshotProgress:
+        response = self._request_json("GET", f"progress/{snapshot_id}")
+        if not isinstance(response, dict):
+            raise BrightDataError("Bright Data returned an invalid progress response.")
+        status = str(response.get("status", "")).strip().lower()
+        if not status:
+            raise BrightDataError("Bright Data progress response did not contain a status.")
+        return SnapshotProgress(snapshot_id=snapshot_id, status=status, response=response)
+
+
+    def wait_until_ready(
+        self,
+        snapshot_id: str,
+        *,
+        poll_interval: float = 10.0,
+        timeout_seconds: float = 3600.0,
+        on_progress: Callable[[SnapshotProgress], None] | None = None,
+    ) -> SnapshotProgress:
+        started = time.monotonic()
+        last_status: str | None = None
+
+
+        while True:
+            progress = self.get_progress(snapshot_id)
+            if on_progress and progress.status != last_status:
+                on_progress(progress)
+            last_status = progress.status
+
+
+            if progress.status == "ready":
+                return progress
+            if progress.status in TERMINAL_FAILURE_STATUSES:
+                detail = progress.response.get("error") or progress.response.get("message")
+                suffix = f": {detail}" if detail else ""
+                raise BrightDataError(f"Snapshot {snapshot_id} {progress.status}{suffix}")
+            if progress.status not in IN_PROGRESS_STATUSES:
+                raise BrightDataError(
+                    f"Snapshot {snapshot_id} returned unknown status '{progress.status}'."
+                )
+            if time.monotonic() - started >= timeout_seconds:
+                raise BrightDataError(
+                    f"Timed out waiting for snapshot {snapshot_id}. "
+                    "The snapshot ID was saved and can be checked in Bright Data."
+                )
+            self._sleep(max(1.0, poll_interval))
+
+
+    def download_results(self, snapshot_id: str) -> list[dict[str, Any]]:
+        response = self._request_json(
+            "GET",
+            f"snapshot/{snapshot_id}",
+            query={"format": "json"},
+        )
+        if not isinstance(response, list):
+            raise BrightDataError("Bright Data snapshot was not returned as a JSON record list.")
+        if not all(isinstance(record, dict) for record in response):
+            raise BrightDataError("Bright Data snapshot contained an invalid product record.")
+        return response
+
+
+
+
+def _extract_error_message(body: str) -> str:
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError:
+        return body.strip()[:500]
+    if isinstance(parsed, dict):
+        for key in ("error", "message", "detail"):
+            if parsed.get(key):
+                return str(parsed[key])[:500]
+    return str(parsed)[:500]
+
+===== END FILE: src/amazon_data_extractor/brightdata_client.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/catalog_reader.py =====
+
+"""Read Amazon catalog rows without assuming a fixed worksheet name."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from pathlib import Path
+import re
+import unicodedata
+from typing import Iterable
+
+from openpyxl import load_workbook
+
+
+ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10}$", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class CatalogProduct:
+    asin: str
+    sku: str
+    product_name: str
+    bullets: list[str]
+    identifier_type: str = ""
+    identifier_value: str = ""
+    asin_source: str = "Catalog ASIN"
+    source_row: int = 0
+
+
+@dataclass(frozen=True)
+class CatalogData:
+    products_by_asin: dict[str, list[CatalogProduct]]
+    products_by_sku: dict[str, list[CatalogProduct]]
+    products: list[CatalogProduct]
+    sheet_name: str
+    record_count: int
+
+
+def clean_asin(value: object) -> str:
+    """Return a valid uppercase ASIN or an empty string."""
+    text = str(value or "").strip().upper()
+    return text if ASIN_PATTERN.fullmatch(text) else ""
+
+
+def clean_text(value: object) -> str:
+    return str(value or "").strip()
+
+
+def sku_key(value: object) -> str:
+    return clean_text(value).casefold()
+
+
+def normalize_header(value: object) -> str:
+    text = unicodedata.normalize("NFKC", clean_text(value)).casefold()
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+def _first_column(columns: dict[str, int], aliases: Iterable[str]) -> int | None:
+    for alias in aliases:
+        if alias in columns:
+            return columns[alias]
+    return None
+
+
+def find_catalog_columns(worksheet) -> tuple[int, dict[str, object]] | None:
+    """Find the human-readable header row in supported Amazon reports."""
+    best_match = None
+    best_score = -1
+
+    for row_number, row in enumerate(
+        worksheet.iter_rows(min_row=1, max_row=25, values_only=True),
+        start=1,
+    ):
+        headers = [normalize_header(value) for value in row]
+        first_column: dict[str, int] = {}
+        for index, header in enumerate(headers):
+            if header and header not in first_column:
+                first_column[header] = index
+
+        sku_column = _first_column(first_column, ("sku", "seller sku"))
+        if sku_column is None:
+            continue
+
+        numbered_bullets: dict[int, int] = {}
+        for index, header in enumerate(headers):
+            match = re.fullmatch(r"bullet ?point ([1-5])", header)
+            if match:
+                numbered_bullets[int(match.group(1))] = index
+        duplicate_bullets = [
+            index for index, header in enumerate(headers) if header == "bullet point"
+        ]
+        for number, index in enumerate(duplicate_bullets[:5], start=1):
+            numbered_bullets.setdefault(number, index)
+        if not numbered_bullets:
+            continue
+
+        asin_column = first_column.get("asin")
+        product_id_type_column = _first_column(
+            first_column,
+            (
+                "product id type",
+                "external product id type",
+                "product identifier type",
+                "identifier type",
+            ),
+        )
+        product_id_column = _first_column(
+            first_column,
+            (
+                "product id",
+                "external product id",
+                "product identifier",
+                "identifier number",
+            ),
+        )
+        gtin_exemption_column = _first_column(
+            first_column,
+            ("gtin exemption reason", "gtin exempt", "gtin exemption"),
+        )
+        name_column = _first_column(
+            first_column,
+            ("title", "product name", "item name", "item name source field"),
+        )
+
+        has_identifier = asin_column is not None or (
+            product_id_type_column is not None and product_id_column is not None
+        )
+        score = (
+            len(numbered_bullets) * 3
+            + (8 if has_identifier else 0)
+            + (2 if name_column is not None else 0)
+        )
+        if score > best_score:
+            best_score = score
+            best_match = (
+                row_number,
+                {
+                    "asin": asin_column,
+                    "product_id_type": product_id_type_column,
+                    "product_id": product_id_column,
+                    "gtin_exemption": gtin_exemption_column,
+                    "sku": sku_column,
+                    "name": name_column,
+                    "bullets": numbered_bullets,
+                },
+            )
+
+    return best_match
+
+
+def first_data_row(worksheet, header_row: int, columns: dict[str, object]) -> int:
+    """Skip the machine-field and example rows in Amazon Template sheets."""
+    data_row = header_row + 1
+    if worksheet.title != "Template":
+        return data_row
+
+    probe = next(
+        worksheet.iter_rows(min_row=data_row, max_row=data_row, values_only=True),
+        None,
+    )
+    if not probe:
+        return data_row
+
+    sku_column = columns["sku"]
+    sku_text = clean_text(probe[sku_column]) if sku_column < len(probe) else ""
+    if "#1.value" in sku_text or "contribution_sku" in sku_text.casefold():
+        return header_row + 3
+    return data_row
+
+
+def _row_value(row: tuple, column: int | None) -> str:
+    return clean_text(row[column]) if column is not None and column < len(row) else ""
+
+
+def _identifier_from_row(row: tuple, columns: dict[str, object]) -> tuple[str, str]:
+    identifier_type = _row_value(row, columns["product_id_type"])
+    identifier_value = _row_value(row, columns["product_id"])
+    if not identifier_value:
+        exemption = _row_value(row, columns["gtin_exemption"])
+        if exemption:
+            identifier_type = identifier_type or "GTIN Exempt"
+            identifier_value = exemption
+    return identifier_type, identifier_value
+
+
+def _asin_from_row(
+    row: tuple,
+    columns: dict[str, object],
+    identifier_type: str,
+    identifier_value: str,
+) -> str:
+    asin = clean_asin(_row_value(row, columns["asin"]))
+    if asin:
+        return asin
+    if identifier_type.casefold() == "asin":
+        return clean_asin(identifier_value)
+    return ""
+
+
+def build_catalog_data(
+    products: list[CatalogProduct],
+    *,
+    sheet_name: str,
+) -> CatalogData:
+    by_asin: dict[str, list[CatalogProduct]] = {}
+    by_sku: dict[str, list[CatalogProduct]] = {}
+    for product in products:
+        if product.asin:
+            by_asin.setdefault(product.asin, []).append(product)
+        if product.sku:
+            by_sku.setdefault(sku_key(product.sku), []).append(product)
+    return CatalogData(by_asin, by_sku, products, sheet_name, len(products))
+
+
+def with_product_asins(
+    catalog: CatalogData,
+    replacements: dict[int, tuple[str, str]],
+) -> CatalogData:
+    """Return a re-indexed catalog after resolving selected blank ASINs."""
+    products = []
+    for product in catalog.products:
+        replacement = replacements.get(product.source_row)
+        if product.asin or not replacement:
+            products.append(product)
+            continue
+        asin, source = replacement
+        products.append(replace(product, asin=asin, asin_source=source))
+    return build_catalog_data(products, sheet_name=catalog.sheet_name)
+
+
+def load_catalog(path: str | Path) -> CatalogData:
+    """Load ASIN, identifier, SKU, name, and Bullet Point 1-5 fields."""
+    path = Path(path)
+    workbook = load_workbook(
+        path,
+        read_only=True,
+        data_only=True,
+        keep_vba=path.suffix.lower() == ".xlsm",
+    )
+
+    try:
+        preferred_sheets = [
+            name
+            for name in ("Template", "Listing Content", "Products")
+            if name in workbook.sheetnames
+        ]
+        preferred_sheets += [
+            name for name in workbook.sheetnames if name not in preferred_sheets
+        ]
+
+        selected = None
+        for sheet_name in preferred_sheets:
+            worksheet = workbook[sheet_name]
+            columns = find_catalog_columns(worksheet)
+            if columns:
+                selected = (worksheet, columns)
+                break
+
+        if selected is None:
+            found = ", ".join(workbook.sheetnames) or "(none)"
+            raise ValueError(
+                "Category Listings Report was not recognized. It needs SKU and "
+                "Bullet Point columns; ASIN or Product ID fields are recommended. "
+                f"Worksheets found: {found}."
+            )
+
+        worksheet, (header_row, columns) = selected
+        start_row = first_data_row(worksheet, header_row, columns)
+        products: list[CatalogProduct] = []
+
+        for source_row, row in enumerate(
+            worksheet.iter_rows(min_row=start_row, values_only=True),
+            start=start_row,
+        ):
+            sku = _row_value(row, columns["sku"])
+            if not sku:
+                continue
+
+            identifier_type, identifier_value = _identifier_from_row(row, columns)
+            asin = _asin_from_row(row, columns, identifier_type, identifier_value)
+            if asin and not identifier_type:
+                identifier_type = "ASIN"
+            if asin and not identifier_value:
+                identifier_value = asin
+
+            bullets = [
+                _row_value(row, columns["bullets"].get(number))
+                for number in range(1, 6)
+            ]
+            products.append(
+                CatalogProduct(
+                    asin=asin,
+                    sku=sku,
+                    product_name=_row_value(row, columns["name"]),
+                    bullets=bullets,
+                    identifier_type=identifier_type,
+                    identifier_value=identifier_value,
+                    asin_source="Catalog ASIN" if asin else "",
+                    source_row=source_row,
+                )
+            )
+
+        return build_catalog_data(products, sheet_name=worksheet.title)
+    finally:
+        workbook.close()
+
+===== END FILE: src/amazon_data_extractor/catalog_reader.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/cli.py =====
+
+"""Command-line entry point for the first Amazon extraction workflow."""
+
+
+from __future__ import annotations
+
+
+import argparse
+import getpass
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+from . import __version__
+from .asin_reader import InputWorkbookError, read_asins
+from .brightdata_client import BrightDataClient, BrightDataError, SnapshotProgress
+from .exporter import write_outputs
+
+
+DEFAULT_API_KEY_FILE = Path("brightdata_api_key.txt")
+
+
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="amazon-data-extractor",
+        description="Read ASINs from Excel and collect current Amazon data through Bright Data.",
+    )
+    parser.add_argument(
+        "input_file",
+        type=Path,
+        nargs="?",
+        help="Path to the .xlsx workbook (prompted when omitted)",
+    )
+    parser.add_argument("--sheet", help="Worksheet to read (default: active worksheet)")
+    parser.add_argument("--column", help="ASIN column name (default: auto-detect)")
+    parser.add_argument("--header-row", type=int, default=1, help="Header row number (default: 1)")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output"),
+        help="Parent output directory (default: output)",
+    )
+    parser.add_argument("--language", default="EN", help="Amazon language (default: EN)")
+    parser.add_argument("--zipcode", help="Optional ZIP code for location-specific results")
+    parser.add_argument(
+        "--api-key-file",
+        type=Path,
+        default=DEFAULT_API_KEY_FILE,
+        help="Read the Bright Data API key from this local text file",
+    )
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Use Bright Data's synchronous request (maximum 20 ASINs)",
+    )
+    parser.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=10.0,
+        help="Seconds between progress checks (default: 10)",
+    )
+    parser.add_argument(
+        "--timeout-minutes",
+        type=float,
+        default=60.0,
+        help="Maximum wait time in minutes (default: 60)",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Validate Excel without calling Bright Data")
+    parser.add_argument("--yes", action="store_true", help="Skip the submission confirmation")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    return parser
+
+
+
+
+def _confirm_submission(count: int) -> bool:
+    print()
+    print(f"ASINs to submit: {count}")
+    print(f"Estimated successfully delivered records: about {count}")
+    answer = input("Submit this batch to Bright Data? [y/N]: ").strip().lower()
+    return answer in {"y", "yes"}
+
+
+
+
+def _save_initial_metadata(run_dir: Path, metadata: dict[str, object]) -> Path:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    metadata_path = run_dir / "run_metadata.json"
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return metadata_path
+
+
+
+
+def _append_error_log(
+    output_dir: Path,
+    *,
+    run_name: str,
+    input_file: Path,
+    asin_count: int,
+    error: BaseException,
+) -> Path:
+    """Append a safe, timestamped failure entry to the persistent error log."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    log_path = output_dir / "errors.txt"
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    error_text = str(error).strip() or error.__class__.__name__
+    entry = (
+        f"[{timestamp}] UTC\n"
+        f"Run: {run_name}\n"
+        f"Input workbook: {input_file}\n"
+        f"ASINs: {asin_count}\n"
+        f"Error: {error_text}\n"
+        + "-" * 72
+        + "\n"
+    )
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(entry)
+    return log_path
+
+
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+
+
+    if args.input_file is None:
+        entered_path = input("Path to the Excel workbook (.xlsx): ").strip().strip('"')
+        if not entered_path:
+            print("No input workbook was provided.", file=sys.stderr)
+            return 2
+        args.input_file = Path(entered_path)
+
+
+    try:
+        read_result = read_asins(
+            args.input_file,
+            sheet_name=args.sheet,
+            column_name=args.column,
+            header_row=args.header_row,
+        )
+    except InputWorkbookError as exc:
+        print(f"Input error: {exc}", file=sys.stderr)
+        return 2
+
+
+    print(f"Worksheet: {read_result.sheet_name}")
+    print(f"ASIN column: {read_result.column_name}")
+    print(f"Valid unique ASINs: {len(read_result.asins)}")
+    print(f"Duplicates skipped: {read_result.duplicate_count}")
+    print(f"Invalid rows skipped: {read_result.invalid_count}")
+
+
+    if not read_result.asins:
+        print("No valid ASINs were found; nothing was submitted.", file=sys.stderr)
+        return 2
+
+
+    if args.dry_run:
+        print("Dry run complete. Bright Data was not called and no records were used.")
+        return 0
+
+
+    if not args.yes and not _confirm_submission(len(read_result.asins)):
+        print("Canceled. Bright Data was not called.")
+        return 0
+
+
+    api_key = os.environ.get("BRIGHTDATA_API_KEY", "").strip()
+    if not api_key and args.api_key_file.is_file():
+        api_key = args.api_key_file.read_text(encoding="utf-8-sig").strip()
+        if api_key.lower().startswith("bearer "):
+            api_key = api_key[7:].strip()
+        if api_key:
+            print(f"Using Bright Data API key from: {args.api_key_file.resolve()}")
+    if not api_key:
+        api_key = getpass.getpass("Bright Data API key (hidden): ").strip()
+    if not api_key:
+        print("A Bright Data API key is required.", file=sys.stderr)
+        return 2
+
+
+    started_at = datetime.now(timezone.utc)
+    run_name = f"amazon_extraction_{started_at.strftime('%Y%m%d_%H%M%S')}"
+    run_dir = args.output_dir / run_name
+    client = BrightDataClient(api_key)
+
+
+    try:
+        if args.sync:
+            print("Submitting synchronous request...")
+            snapshot_id = None
+            records = client.collect_sync(read_result.asins)
+        else:
+            print("Submitting asynchronous batch...")
+            snapshot_id = client.trigger_collection(
+                read_result.asins,
+                language=args.language,
+                zipcode=args.zipcode,
+            )
+        metadata: dict[str, object] = {
+            "schema_version": "1.0",
+            "application_version": __version__,
+            "started_at_utc": started_at.isoformat(),
+            "source_workbook": args.input_file.name,
+            "source_worksheet": read_result.sheet_name,
+            "source_asin_column": read_result.column_name,
+            "submitted_asin_count": len(read_result.asins),
+            "invalid_row_count": read_result.invalid_count,
+            "duplicate_row_count": read_result.duplicate_count,
+            "dataset_id": client.dataset_id,
+            "snapshot_id": snapshot_id or "",
+            "all_variations": False,
+            "language": args.language.upper(),
+            "zipcode": args.zipcode or "",
+            "status": "collected" if args.sync else "submitted",
+        }
+        metadata_path = _save_initial_metadata(run_dir, metadata)
+        if snapshot_id:
+            print(f"Snapshot ID: {snapshot_id}")
+        else:
+            print("Synchronous response received.")
+        print(f"Recovery information saved to: {metadata_path.resolve()}")
+
+
+        def show_progress(progress: SnapshotProgress) -> None:
+            print(f"Bright Data status: {progress.status}")
+
+
+        if snapshot_id:
+            client.wait_until_ready(
+                snapshot_id,
+                poll_interval=args.poll_seconds,
+                timeout_seconds=args.timeout_minutes * 60,
+                on_progress=show_progress,
+            )
+            print("Downloading completed snapshot...")
+            records = client.download_results(snapshot_id)
+
+
+        completed_at = datetime.now(timezone.utc)
+        metadata.update(
+            {
+                "completed_at_utc": completed_at.isoformat(),
+                "duration_seconds": round((completed_at - started_at).total_seconds(), 3),
+                "returned_record_count": len(records),
+                "error_record_count": sum(bool(record.get("error")) for record in records),
+                "warning_record_count": sum(bool(record.get("warning")) for record in records),
+                "status": "completed",
+            }
+        )
+        raw_path, workbook_path, _ = write_outputs(
+            run_dir,
+            records=records,
+            audit_rows=read_result.audit_rows,
+            metadata=metadata,
+        )
+        print(f"Returned records: {len(records)}")
+        print(f"Excel workbook: {workbook_path.resolve()}")
+        print(f"Untouched JSON: {raw_path.resolve()}")
+        return 0
+    except BrightDataError as exc:
+        error_log = _append_error_log(
+            args.output_dir,
+            run_name=run_name,
+            input_file=args.input_file,
+            asin_count=len(read_result.asins),
+            error=exc,
+        )
+        print(f"Bright Data error: {exc}", file=sys.stderr)        print(f"Error log: {error_log.resolve()}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nStopped by user. Any displayed snapshot ID remains available in Bright Data.", file=sys.stderr)
+        return 130
+
+
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+===== END FILE: src/amazon_data_extractor/cli.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/comparator.py =====
+
+"""Resolve products and classify live-versus-catalog bullet points."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+import html
+from pathlib import Path
+import re
+import unicodedata
+from typing import Any, Iterable, Mapping, Sequence
+
+from .all_listings import AllListingsIndex, load_all_listings
+from .catalog_reader import (
+    CatalogData,
+    CatalogProduct,
+    clean_asin,
+    load_catalog,
+    sku_key,
+    with_product_asins,
+)
+from .comparison_report import write_comparison_report
+from .live_records import LiveProduct, build_live_results
+
+
+EXACT_MATCH = "Exact Match"
+FORMATTING_ONLY = "Formatting Only"
+TEXT_CHANGED = "Text Changed"
+MISSING_LIVE = "Missing Live"
+MISSING_CATALOG = "Missing Catalog"
+BULLET_MOVED = "Bullet Moved"
+
+STATUS_ORDER = (
+    TEXT_CHANGED,
+    MISSING_LIVE,
+    MISSING_CATALOG,
+    BULLET_MOVED,
+    FORMATTING_ONLY,
+    EXACT_MATCH,
+)
+REVIEW_STATUSES = frozenset(
+    {TEXT_CHANGED, MISSING_LIVE, MISSING_CATALOG, BULLET_MOVED}
+)
+
+
+@dataclass(frozen=True)
+class BulletComparison:
+    asin: str
+    product_name: str
+    sku: str
+    matched_via: str
+    catalog_position: int | None
+    live_position: int | None
+    status: str
+    catalog_value: str
+    live_value: str
+
+    @property
+    def catalog_field(self) -> str:
+        if self.catalog_position is None:
+            return "(none)"
+        return f"Bullet Point {self.catalog_position}"
+
+    @property
+    def live_field(self) -> str:
+        if self.live_position is None:
+            return "(none)"
+        return f"Bullet Point {self.live_position}"
+
+    @property
+    def needs_review(self) -> bool:
+        return self.status in REVIEW_STATUSES
+
+
+@dataclass
+class ComparisonResult:
+    comparisons: list[BulletComparison]
+    live_problems: list[LiveProduct]
+    not_in_catalog: list[LiveProduct]
+    stats: dict[str, int]
+    unresolved_catalog: list[CatalogProduct] = field(default_factory=list)
+
+    @property
+    def issues(self) -> list[BulletComparison]:
+        return [item for item in self.comparisons if item.needs_review]
+
+    @property
+    def comparisons_by_asin(self) -> dict[str, list[BulletComparison]]:
+        return _group_by_asin(self.comparisons)
+
+    @property
+    def issues_by_asin(self) -> dict[str, list[BulletComparison]]:
+        return _group_by_asin(self.issues)
+
+
+@dataclass(frozen=True)
+class PreparedComparison:
+    records: list[dict[str, Any]]
+    requested_asins: list[str]
+    catalog: CatalogData
+    all_listings: AllListingsIndex | None
+    resolution_stats: dict[str, int]
+    unresolved_catalog: list[CatalogProduct]
+
+
+def _group_by_asin(
+    comparisons: Iterable[BulletComparison],
+) -> dict[str, list[BulletComparison]]:
+    grouped: dict[str, list[BulletComparison]] = {}
+    for comparison in comparisons:
+        grouped.setdefault(comparison.asin, []).append(comparison)
+    return grouped
+
+
+def normalize_text(value: Any) -> str:
+    """Remove presentation-only differences before comparing bullet text."""
+    text = html.unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = unicodedata.normalize("NFKC", text)
+    text = (
+        text.replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
+        .replace("\u2022", " ")
+    )
+    text = re.sub(r"[\s\.,;:!?()\[\]{}\-_/\\]+", " ", text)
+    return text.strip().casefold()
+
+
+def unique_catalog_rows(products: Iterable[CatalogProduct]) -> list[CatalogProduct]:
+    """Avoid reporting duplicate catalog rows while preserving real variants."""
+    unique = []
+    seen = set()
+    for product in products:
+        key = (
+            product.asin,
+            sku_key(product.sku),
+            tuple(normalize_text(value) for value in product.bullets),
+        )
+        if key not in seen:
+            seen.add(key)
+            unique.append(product)
+    return unique
+
+
+def resolve_catalog_asins(
+    catalog: CatalogData,
+    live_results: Mapping[str, LiveProduct],
+    all_listings: AllListingsIndex | None = None,
+    manual_resolutions: Mapping[int, str] | None = None,
+) -> tuple[CatalogData, dict[str, int], list[CatalogProduct]]:
+    """Resolve blank catalog ASINs by SKU, unique name, then user input."""
+    title_to_asins: dict[str, set[str]] = {}
+    for live in live_results.values():
+        if not live.can_compare:
+            continue
+        title_key = normalize_text(live.title)
+        if title_key:
+            title_to_asins.setdefault(title_key, set()).add(live.requested_asin)
+
+    stats = {
+        "catalog_asins_present": 0,
+        "catalog_asins_resolved_by_sku": 0,
+        "catalog_asins_resolved_by_name": 0,
+        "catalog_asins_resolved_by_user": 0,
+        "catalog_asins_unresolved": 0,
+    }
+    replacements: dict[int, tuple[str, str]] = {}
+    manual_resolutions = manual_resolutions or {}
+
+    for product in catalog.products:
+        if product.asin:
+            stats["catalog_asins_present"] += 1
+            continue
+
+        asin = ""
+        source = ""
+        if all_listings and product.sku:
+            asin = clean_asin(all_listings.sku_to_asin.get(sku_key(product.sku)))
+            if asin:
+                source = "SKU via All Listings TXT"
+
+        if not asin:
+            title_key = normalize_text(product.product_name)
+            possible_asins = title_to_asins.get(title_key, set()) if title_key else set()
+            if len(possible_asins) == 1:
+                asin = next(iter(possible_asins))
+                source = "Product Name"
+
+        if not asin:
+            asin = clean_asin(manual_resolutions.get(product.source_row))
+            if asin:
+                source = "User-entered ASIN"
+
+        if not asin:
+            continue
+
+        replacements[product.source_row] = (asin, source)
+        stats_key = {
+            "SKU via All Listings TXT": "catalog_asins_resolved_by_sku",
+            "Product Name": "catalog_asins_resolved_by_name",
+            "User-entered ASIN": "catalog_asins_resolved_by_user",
+        }[source]
+        stats[stats_key] += 1
+
+    resolved_catalog = with_product_asins(catalog, replacements)
+    unresolved = [product for product in resolved_catalog.products if not product.asin]
+    stats["catalog_asins_unresolved"] = len(unresolved)
+    return resolved_catalog, stats, unresolved
+
+
+def _match_method(products: list[CatalogProduct], default: str) -> str:
+    sources = {product.asin_source for product in products if product.asin_source}
+    non_catalog_sources = sources - {"Catalog ASIN"}
+    if len(non_catalog_sources) == 1 and "Catalog ASIN" not in sources:
+        return next(iter(non_catalog_sources))
+    return default
+
+
+def find_catalog_matches(
+    live: LiveProduct,
+    catalog: CatalogData,
+    all_listings: AllListingsIndex | None,
+) -> tuple[list[CatalogProduct], str]:
+    """Match by ASIN first, then SKU, then a unique product name."""
+    for asin, method in (
+        (live.requested_asin, "ASIN"),
+        (live.returned_asin, "Returned ASIN"),
+    ):
+        if asin and asin in catalog.products_by_asin:
+            products = unique_catalog_rows(catalog.products_by_asin[asin])
+            return products, _match_method(products, method)
+
+    if all_listings:
+        matches: list[CatalogProduct] = []
+        candidate_asins = dict.fromkeys(
+            asin for asin in (live.requested_asin, live.returned_asin) if asin
+        )
+        for asin in candidate_asins:
+            for sku in all_listings.asin_to_skus.get(asin, []):
+                matches.extend(catalog.products_by_sku.get(sku_key(sku), []))
+        matches = unique_catalog_rows(matches)
+        if matches:
+            return matches, "SKU via All Listings TXT"
+
+    title_key = normalize_text(live.title)
+    if title_key:
+        matches = unique_catalog_rows(
+            product
+            for product in catalog.products
+            if normalize_text(product.product_name) == title_key
+        )
+        if len(matches) == 1:
+            return matches, "Product Name"
+
+    return [], ""
+
+
+def _comparison(
+    live: LiveProduct,
+    catalog_product: CatalogProduct,
+    *,
+    matched_via: str,
+    catalog_position: int | None,
+    live_position: int | None,
+    status: str,
+    catalog_value: str,
+    live_value: str,
+) -> BulletComparison:
+    return BulletComparison(
+        asin=live.requested_asin,
+        product_name=catalog_product.product_name or live.title,
+        sku=catalog_product.sku,
+        matched_via=matched_via,
+        catalog_position=catalog_position,
+        live_position=live_position,
+        status=status,
+        catalog_value=catalog_value or "(blank)",
+        live_value=live_value or "(blank)",
+    )
+
+
+def _same_position_status(catalog_value: str, live_value: str) -> str:
+    if catalog_value == live_value:
+        return EXACT_MATCH
+    if normalize_text(catalog_value) == normalize_text(live_value):
+        return FORMATTING_ONLY
+    if catalog_value and not live_value:
+        return MISSING_LIVE
+    if live_value and not catalog_value:
+        return MISSING_CATALOG
+    return TEXT_CHANGED
+
+
+def compare_bullets(
+    live: LiveProduct,
+    catalog_product: CatalogProduct,
+    matched_via: str = "ASIN",
+) -> list[BulletComparison]:
+    """Classify five catalog bullets against five live bullets."""
+    catalog_values = (list(catalog_product.bullets[:5]) + [""] * 5)[:5]
+    live_values = (list(live.bullets[:5]) + [""] * 5)[:5]
+    catalog_norms = [normalize_text(value) for value in catalog_values]
+    live_norms = [normalize_text(value) for value in live_values]
+
+    matched_catalog: set[int] = set()
+    matched_live: set[int] = set()
+    results: list[BulletComparison] = []
+
+    for index in range(5):
+        if not catalog_values[index] and not live_values[index]:
+            continue
+        if catalog_norms[index] and catalog_norms[index] == live_norms[index]:
+            results.append(
+                _comparison(
+                    live,
+                    catalog_product,
+                    matched_via=matched_via,
+                    catalog_position=index + 1,
+                    live_position=index + 1,
+                    status=_same_position_status(
+                        catalog_values[index], live_values[index]
+                    ),
+                    catalog_value=catalog_values[index],
+                    live_value=live_values[index],
+                )
+            )
+            matched_catalog.add(index)
+            matched_live.add(index)
+
+    move_candidates = []
+    for catalog_index in range(5):
+        if catalog_index in matched_catalog or not catalog_norms[catalog_index]:
+            continue
+        for live_index in range(5):
+            if live_index in matched_live or not live_norms[live_index]:
+                continue
+            if (
+                catalog_index != live_index
+                and catalog_norms[catalog_index] == live_norms[live_index]
+            ):
+                move_candidates.append(
+                    (abs(catalog_index - live_index), catalog_index, live_index)
+                )
+
+    for _distance, catalog_index, live_index in sorted(move_candidates):
+        if catalog_index in matched_catalog or live_index in matched_live:
+            continue
+        results.append(
+            _comparison(
+                live,
+                catalog_product,
+                matched_via=matched_via,
+                catalog_position=catalog_index + 1,
+                live_position=live_index + 1,
+                status=BULLET_MOVED,
+                catalog_value=catalog_values[catalog_index],
+                live_value=live_values[live_index],
+            )
+        )
+        matched_catalog.add(catalog_index)
+        matched_live.add(live_index)
+
+    for index in range(5):
+        if index in matched_catalog or index in matched_live:
+            continue
+        if not catalog_values[index] and not live_values[index]:
+            continue
+        results.append(
+            _comparison(
+                live,
+                catalog_product,
+                matched_via=matched_via,
+                catalog_position=index + 1 if catalog_values[index] else None,
+                live_position=index + 1 if live_values[index] else None,
+                status=_same_position_status(
+                    catalog_values[index], live_values[index]
+                ),
+                catalog_value=catalog_values[index],
+                live_value=live_values[index],
+            )
+        )
+        if catalog_values[index]:
+            matched_catalog.add(index)
+        if live_values[index]:
+            matched_live.add(index)
+
+    for index in range(5):
+        if index not in matched_catalog and catalog_values[index]:
+            results.append(
+                _comparison(
+                    live,
+                    catalog_product,
+                    matched_via=matched_via,
+                    catalog_position=index + 1,
+                    live_position=None,
+                    status=MISSING_LIVE,
+                    catalog_value=catalog_values[index],
+                    live_value="",
+                )
+            )
+        if index not in matched_live and live_values[index]:
+            results.append(
+                _comparison(
+                    live,
+                    catalog_product,
+                    matched_via=matched_via,
+                    catalog_position=None,
+                    live_position=index + 1,
+                    status=MISSING_CATALOG,
+                    catalog_value="",
+                    live_value=live_values[index],
+                )
+            )
+
+    status_rank = {status: index for index, status in enumerate(STATUS_ORDER)}
+    return sorted(
+        results,
+        key=lambda item: (
+            item.catalog_position or item.live_position or 99,
+            item.live_position or 99,
+            status_rank[item.status],
+        ),
+    )
+
+
+def compare_records(
+    records: list[dict[str, Any]],
+    requested_asins: Sequence[str],
+    catalog: CatalogData,
+    all_listings: AllListingsIndex | None = None,
+    *,
+    unresolved_catalog: list[CatalogProduct] | None = None,
+    resolution_stats: Mapping[str, int] | None = None,
+) -> ComparisonResult:
+    live_results = build_live_results(records, requested_asins)
+    comparisons: list[BulletComparison] = []
+    live_problems: list[LiveProduct] = []
+    not_in_catalog: list[LiveProduct] = []
+    match_counts: dict[str, int] = {}
+    stats = {
+        "requested": 0,
+        "found": 0,
+        "redirected": 0,
+        "not_found": 0,
+        "extraction_failed": 0,
+        "not_in_catalog": 0,
+        **dict(resolution_stats or {}),
+    }
+
+    for raw_asin in requested_asins:
+        asin = clean_asin(raw_asin)
+        if not asin:
+            continue
+        stats["requested"] += 1
+        live = live_results[asin]
+
+        if not live.can_compare:
+            live_problems.append(live)
+            if live.status == "Redirected":
+                stats["redirected"] += 1
+            elif live.status == "Extraction Failed":
+                stats["extraction_failed"] += 1
+            else:
+                stats["not_found"] += 1
+            continue
+
+        stats["found"] += 1
+        catalog_products, matched_via = find_catalog_matches(
+            live, catalog, all_listings
+        )
+        if not catalog_products:
+            not_in_catalog.append(live)
+            stats["not_in_catalog"] += 1
+            continue
+
+        match_counts[matched_via] = match_counts.get(matched_via, 0) + 1
+        for catalog_product in catalog_products:
+            comparisons.extend(
+                compare_bullets(live, catalog_product, matched_via=matched_via)
+            )
+
+    result = ComparisonResult(
+        comparisons,
+        live_problems,
+        not_in_catalog,
+        stats,
+        unresolved_catalog or [],
+    )
+    status_keys = {
+        EXACT_MATCH: "exact_match_rows",
+        FORMATTING_ONLY: "formatting_only_rows",
+        TEXT_CHANGED: "text_changed_rows",
+        MISSING_LIVE: "missing_live_rows",
+        MISSING_CATALOG: "missing_catalog_rows",
+        BULLET_MOVED: "bullet_moved_rows",
+    }
+    for status, key in status_keys.items():
+        stats[key] = sum(item.status == status for item in comparisons)
+    for method in (
+        "ASIN",
+        "Returned ASIN",
+        "SKU via All Listings TXT",
+        "Product Name",
+        "User-entered ASIN",
+    ):
+        key = "matched_by_" + re.sub(r"[^a-z0-9]+", "_", method.casefold()).strip("_")
+        stats[key] = match_counts.get(method, 0)
+
+    stats["comparison_rows"] = len(comparisons)
+    stats["issue_rows"] = len(result.issues)
+    stats["issue_asins"] = len(result.issues_by_asin)
+    stats["catalog_not_live_asins"] = len(live_problems)
+    stats["not_in_catalog_asins"] = len(not_in_catalog)
+    return result
+
+
+def prepare_comparison(
+    records: list[dict[str, Any]],
+    requested_asins: Sequence[str],
+    catalog_path: str | Path,
+    all_listings_path: str | Path | None = None,
+    manual_resolutions: Mapping[int, str] | None = None,
+) -> PreparedComparison:
+    clean_requested = [asin for value in requested_asins if (asin := clean_asin(value))]
+    live_results = build_live_results(records, clean_requested)
+    catalog = load_catalog(catalog_path)
+    all_listings = load_all_listings(all_listings_path) if all_listings_path else None
+    catalog, resolution_stats, unresolved = resolve_catalog_asins(
+        catalog,
+        live_results,
+        all_listings,
+        manual_resolutions,
+    )
+    return PreparedComparison(
+        records,
+        clean_requested,
+        catalog,
+        all_listings,
+        resolution_stats,
+        unresolved,
+    )
+
+
+def write_prepared_comparison(
+    prepared: PreparedComparison,
+    output_path: str | Path,
+) -> dict[str, int | str]:
+    comparison = compare_records(
+        prepared.records,
+        prepared.requested_asins,
+        prepared.catalog,
+        prepared.all_listings,
+        unresolved_catalog=prepared.unresolved_catalog,
+        resolution_stats=prepared.resolution_stats,
+    )
+    write_comparison_report(output_path, comparison)
+    return {
+        **comparison.stats,
+        "catalog_records": prepared.catalog.record_count,
+        "catalog_sheet": prepared.catalog.sheet_name,
+        "all_listings_rows": (
+            prepared.all_listings.row_count if prepared.all_listings else 0
+        ),
+    }
+
+
+def run_comparison_from_records(
+    records: list[dict[str, Any]],
+    requested_asins: Sequence[str],
+    catalog_path: str | Path,
+    output_path: str | Path,
+    all_listings_path: str | Path | None = None,
+    manual_resolutions: Mapping[int, str] | None = None,
+) -> dict[str, int | str]:
+    prepared = prepare_comparison(
+        records,
+        requested_asins,
+        catalog_path,
+        all_listings_path,
+        manual_resolutions,
+    )
+    return write_prepared_comparison(prepared, output_path)
+
+===== END FILE: src/amazon_data_extractor/comparator.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/comparison_report.py =====
+
+"""Write the v0.6.3 bullet-classification workbook."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+
+
+HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
+HEADER_FONT = Font(color="FFFFFF", bold=True)
+REVIEW_FILL = PatternFill("solid", fgColor="FFF2CC")
+ERROR_FILL = PatternFill("solid", fgColor="FCE4D6")
+STATUS_FILLS = {
+    "Exact Match": PatternFill("solid", fgColor="E2F0D9"),
+    "Formatting Only": PatternFill("solid", fgColor="DDEBF7"),
+    "Text Changed": PatternFill("solid", fgColor="F4CCCC"),
+    "Missing Live": PatternFill("solid", fgColor="FCE4D6"),
+    "Missing Catalog": PatternFill("solid", fgColor="FCE4D6"),
+    "Bullet Moved": PatternFill("solid", fgColor="FCE5CD"),
+}
+STATUS_ORDER = {
+    "Text Changed": 0,
+    "Missing Live": 1,
+    "Missing Catalog": 2,
+    "Bullet Moved": 3,
+    "Formatting Only": 4,
+    "Exact Match": 5,
+}
+
+
+def amazon_url(asin: str) -> str:
+    return f"https://www.amazon.com/dp/{asin}" if asin else ""
+
+
+def add_amazon_link(cell, asin: str) -> None:
+    cell.value = "Open Amazon"
+    cell.hyperlink = amazon_url(asin)
+    cell.style = "Hyperlink"
+
+
+def format_sheet(worksheet, widths: list[int]) -> None:
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+    worksheet.sheet_view.showGridLines = False
+    worksheet.row_dimensions[1].height = 30
+
+    for cell in worksheet[1]:
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for row in worksheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    for number, width in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(number)].width = width
+
+
+def action_for(status: str) -> str:
+    return {
+        "Exact Match": "No action",
+        "Formatting Only": "Content matches; formatting review is optional",
+        "Text Changed": "Review the wording",
+        "Missing Live": "Add or restore the live bullet",
+        "Missing Catalog": "Review whether the catalog needs this bullet",
+        "Bullet Moved": "Review bullet order",
+    }[status]
+
+
+def excel_safe(value):
+    """Keep uploaded text from becoming an Excel formula."""
+    if not isinstance(value, str):
+        return value
+    if value.startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
+
+def append_comparison_row(worksheet, item) -> None:
+    worksheet.append(
+        [
+            item.asin,
+            excel_safe(item.product_name),
+            excel_safe(item.sku),
+            excel_safe(item.matched_via),
+            "",
+            item.catalog_field,
+            item.live_field,
+            item.status,
+            excel_safe(item.catalog_value),
+            excel_safe(item.live_value),
+            "Yes" if item.needs_review else "No",
+            action_for(item.status),
+        ]
+    )
+    row_number = worksheet.max_row
+    add_amazon_link(worksheet.cell(row_number, 5), item.asin)
+    worksheet.cell(row_number, 8).fill = STATUS_FILLS[item.status]
+    if item.needs_review:
+        worksheet.cell(row_number, 11).fill = REVIEW_FILL
+
+
+def write_comparison_report(output_path, comparison) -> None:
+    workbook = Workbook()
+    issues_sheet = workbook.active
+    issues_sheet.title = "ASIN Issues"
+    results_sheet = workbook.create_sheet("Bullet Results")
+    details_sheet = workbook.create_sheet("Difference Details")
+    asin_needed_sheet = workbook.create_sheet("ASIN Needed")
+    not_catalog_sheet = workbook.create_sheet("Not Found in Catalog")
+    live_problem_sheet = workbook.create_sheet("Live Extraction Problems")
+    guide_sheet = workbook.create_sheet("Read Me")
+
+    issues_sheet.append(
+        [
+            "ASIN",
+            "Product Name",
+            "SKU(s)",
+            "Amazon Link",
+            "Issue Count",
+            "Classifications",
+            "Status",
+        ]
+    )
+    for asin, issues in comparison.issues_by_asin.items():
+        skus = sorted({issue.sku for issue in issues if issue.sku}, key=str.casefold)
+        name = next((issue.product_name for issue in issues if issue.product_name), "")
+        statuses = sorted(
+            {issue.status for issue in issues},
+            key=lambda status: STATUS_ORDER.get(status, 99),
+        )
+        issues_sheet.append(
+            [
+                asin,
+                excel_safe(name),
+                excel_safe(", ".join(skus)),
+                "",
+                len(issues),
+                ", ".join(statuses),
+                "Needs Review",
+            ]
+        )
+        add_amazon_link(issues_sheet.cell(issues_sheet.max_row, 4), asin)
+        issues_sheet.cell(issues_sheet.max_row, 7).fill = REVIEW_FILL
+
+    result_headers = [
+        "ASIN",
+        "Product Name",
+        "SKU",
+        "Matched Via",
+        "Amazon Link",
+        "Catalog Field",
+        "Live Field",
+        "Classification",
+        "Catalog Value",
+        "Live Value",
+        "Needs Review",
+        "Action",
+    ]
+    results_sheet.append(result_headers)
+    for item in comparison.comparisons:
+        append_comparison_row(results_sheet, item)
+
+    details_sheet.append(result_headers)
+    for item in comparison.issues:
+        append_comparison_row(details_sheet, item)
+
+    asin_needed_sheet.append(
+        [
+            "Identifier Type",
+            "Identifier Number",
+            "SKU",
+            "Product Name",
+            "Catalog Row",
+            "Status",
+        ]
+    )
+    for product in comparison.unresolved_catalog:
+        asin_needed_sheet.append(
+            [
+                excel_safe(product.identifier_type or "Unknown"),
+                excel_safe(product.identifier_value or "(blank)"),
+                excel_safe(product.sku),
+                excel_safe(product.product_name),
+                product.source_row,
+                "ASIN not provided",
+            ]
+        )
+
+    not_catalog_sheet.append(["ASIN", "Live Product Name", "Amazon Link", "Status"])
+    for product in comparison.not_in_catalog:
+        not_catalog_sheet.append(
+            [
+                product.requested_asin,
+                excel_safe(product.title),
+                "",
+                "Live ASIN was found, but it was not found in the Category Listings Report.",
+            ]
+        )
+        add_amazon_link(
+            not_catalog_sheet.cell(not_catalog_sheet.max_row, 3),
+            product.requested_asin,
+        )
+        not_catalog_sheet.cell(not_catalog_sheet.max_row, 4).fill = REVIEW_FILL
+
+    live_problem_sheet.append(
+        ["Requested ASIN", "Returned ASIN", "Amazon Link", "Result", "What Happened", "Action"]
+    )
+    for product in comparison.live_problems:
+        live_problem_sheet.append(
+            [
+                product.requested_asin,
+                product.returned_asin,
+                "",
+                product.status,
+                excel_safe(product.message),
+                "Review before comparing" if product.status == "Redirected" else "Retry or review",
+            ]
+        )
+        add_amazon_link(
+            live_problem_sheet.cell(live_problem_sheet.max_row, 3),
+            product.requested_asin,
+        )
+        live_problem_sheet.cell(live_problem_sheet.max_row, 4).fill = ERROR_FILL
+
+    guide_sheet.append(["Classification", "Meaning", "Needs Review"])
+    guide_rows = [
+        ("Exact Match", "The text is identical in the same bullet position.", "No"),
+        (
+            "Formatting Only",
+            "The normalized content matches; only capitalization, punctuation, "
+            "spacing, HTML, or similar presentation differs.",
+            "No",
+        ),
+        ("Text Changed", "Both positions contain text, but the content is different.", "Yes"),
+        ("Missing Live", "The catalog contains a bullet that the live result does not.", "Yes"),
+        ("Missing Catalog", "The live result contains a bullet that the catalog does not.", "Yes"),
+        ("Bullet Moved", "The same normalized bullet exists in both files at different positions.", "Yes"),
+    ]
+    for row in guide_rows:
+        guide_sheet.append(row)
+        guide_sheet.cell(guide_sheet.max_row, 1).fill = STATUS_FILLS[row[0]]
+
+    guide_sheet.append([])
+    guide_sheet.append(
+        [
+            "Product matching order",
+            "ASIN; returned ASIN; SKU through the optional All Listings TXT; "
+            "unique product name; user-entered ASIN.",
+            "",
+        ]
+    )
+    guide_sheet.append(
+        [
+            "ASIN Needed",
+            "Rows left blank on the ASIN question screen remain here with their "
+            "original identifier number.",
+            "",
+        ]
+    )
+
+    format_sheet(issues_sheet, [16, 62, 38, 18, 12, 34, 18])
+    format_sheet(results_sheet, [16, 48, 32, 28, 18, 18, 18, 20, 72, 72, 15, 42])
+    format_sheet(details_sheet, [16, 48, 32, 28, 18, 18, 18, 20, 72, 72, 15, 42])
+    format_sheet(asin_needed_sheet, [20, 26, 42, 62, 14, 24])
+    format_sheet(not_catalog_sheet, [16, 62, 18, 72])
+    format_sheet(live_problem_sheet, [16, 16, 18, 20, 72, 28])
+    format_sheet(guide_sheet, [22, 96, 18])
+
+    for worksheet in (
+        issues_sheet,
+        results_sheet,
+        details_sheet,
+        asin_needed_sheet,
+        not_catalog_sheet,
+        live_problem_sheet,
+    ):
+        for row in worksheet.iter_rows(min_row=2):
+            row[0].number_format = "@"
+            if worksheet is asin_needed_sheet and len(row) > 1:
+                row[1].number_format = "@"
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(output_path)
+
+===== END FILE: src/amazon_data_extractor/comparison_report.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/exporter.py =====
+
+"""Write the untouched JSON response and a human-readable Excel workbook."""
+
+
+from __future__ import annotations
+
+
+import json
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Iterable
+
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+
+
+from .asin_reader import AsinAuditRow
+
+
+
+
+# Stable field order from the confirmed Bright Data Amazon product schema.
+# Unknown fields are appended, so schema additions are not discarded.
+KNOWN_FIELDS = (
+    "category_tree", "target_countries", "category_urls", "title", "seller_name",
+    "brand", "description", "initial_price", "currency", "availability",
+    "reviews_count", "categories", "parent_asin", "asin", "buybox_seller",
+    "number_of_sellers", "root_bs_rank", "ISBN10", "answered_questions", "domain",
+    "images_count", "url", "video_count", "image_url", "item_weight", "rating",
+    "product_dimensions", "seller_id", "image", "date_first_available", "discount",
+    "model_number", "manufacturer", "department", "plus_content", "upc", "video",
+    "top_review", "final_price_high", "final_price", "variations", "delivery",
+    "features", "format", "buybox_prices", "input_asin", "ingredients", "origin_url",
+    "bought_past_month", "is_available", "root_bs_category", "bs_category", "bs_rank",
+    "badge", "subcategory_rank", "amazon_choice", "images", "product_details",
+    "prices_breakdown", "country_of_origin", "from_the_brand", "product_description",
+    "seller_url", "customer_says", "sustainability_features", "climate_pledge_friendly",
+    "videos", "other_sellers_prices", "downloadable_videos", "editorial_reviews",
+    "about_the_author", "zipcode", "coupon", "sponsered", "store_url", "ships_from",
+    "city", "customers_say", "max_quantity_available", "variations_values", "language",
+    "return_policy", "inactive_buy_box", "buybox_seller_rating", "premium_brand",
+    "amazon_prime", "coupon_description", "all_badges", "sponsored",
+    "variant_attributes", "safety_information", "subcategory_link",
+    "is_frequently_returned_item_badge", "frequently_returned_item_message",
+    "is_customers_usually_keep", "title_badge", "review_images", "review_videos",
+    "bought_past_month_text", "is_high_price", "title_highlight", "title_clean",
+    "customers_say_topics", "timestamp", "input_url", "input_language",
+    "input_all_variations", "input_zipcode", "error", "error_code", "warning",
+    "warning_code",
+)
+
+
+WORKBOOK_SCHEMA_VERSION = "v2.0"
+HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
+HEADER_FONT = Font(color="FFFFFF", bold=True)
+ALTERNATE_FILL = PatternFill("solid", fgColor="F3F7FB")
+LINK_FONT = Font(color="0563C1", underline="single")
+HEADER_BORDER = Border(bottom=Side(style="medium", color="17365D"))
+EXCEL_CELL_LIMIT = 32_767
+
+
+
+
+PRODUCT_HEADERS = (
+    "Requested ASIN", "ASIN", "Parent ASIN", "Complete Amazon Title", "Brand",
+    "Model Number", "Current Price", "Original Price", "Currency", "Availability",
+    "Available", "Maximum Orderable Quantity", "Seller", "Ships From",
+    "Buy Box Seller", "Number of Sellers", "Prime Eligible", "Rating", "Reviews",
+    "Bought in Past Month", "Main Category", "Main Category Rank", "Amazon's Choice",
+    "Product Dimensions", "Item Weight", "Country of Origin", "Main Image",
+    "Amazon Page", "Collected At",
+)
+
+
+
+
+def _json_default(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+
+
+def _excel_value(value: Any) -> str | int | float | bool:
+    """Convert a value safely without allowing spreadsheet formula injection."""
+
+
+    if value is None:
+        return ""
+    if isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, (dict, list, tuple)):
+        text = json.dumps(value, ensure_ascii=False, default=_json_default)
+    else:
+        text = str(value)
+
+    if len(text) > EXCEL_CELL_LIMIT:
+        text = text[:32_680] + "... [complete value is in brightdata_raw.json]"
+    if text.startswith(("=", "+", "-", "@")):
+        text = "'" + text
+    return text
+
+
+
+
+def _decode_nested(value: Any) -> Any:
+    """Decode JSON-looking strings while leaving ordinary text unchanged."""
+
+
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if len(stripped) < 2 or stripped[0] not in "[{" or stripped[-1] not in "]}":
+        return value
+    try:
+        return json.loads(stripped)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return value
+
+
+
+
+def _items(value: Any) -> list[Any]:
+    value = _decode_nested(value)
+    if value in (None, ""):
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
+
+
+
+
+def _human_value(value: Any) -> str | int | float:
+    """Make common nested values readable on the human-facing worksheets."""
+
+
+    value = _decode_nested(value)
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, (list, tuple)):
+        if all(not isinstance(item, (dict, list, tuple)) for item in value):
+            return "\n".join(str(item) for item in value if item not in (None, ""))
+        return _excel_value(value)
+    if isinstance(value, dict):
+        if all(not isinstance(item, (dict, list, tuple)) for item in value.values()):
+            return "\n".join(
+                f"{key}: {item}" for key, item in value.items() if item not in (None, "")
+            )
+        return _excel_value(value)
+    return _excel_value(value)
+
+
+
+
+def _ordered_fields(records: Iterable[dict[str, Any]]) -> list[str]:
+    discovered: set[str] = set()
+    for record in records:
+        discovered.update(record)
+    known = list(KNOWN_FIELDS)
+    unknown = sorted(discovered.difference(KNOWN_FIELDS), key=str.lower)
+    return known + unknown
+
+
+
+
+def _first_value(record: dict[str, Any], *fields: str) -> Any:
+    for field in fields:
+        value = record.get(field)
+        if value not in (None, ""):
+            return value
+    return ""
+
+
+
+
+def _record_asin(record: dict[str, Any]) -> str:
+    asin = _first_value(record, "asin", "input_asin")
+    if asin:
+        return str(asin)
+    input_value = _decode_nested(record.get("input"))
+    if isinstance(input_value, dict) and input_value.get("asin"):
+        return str(input_value["asin"])
+    return ""
+
+
+
+
+def _requested_asin(record: dict[str, Any]) -> str:
+    requested = record.get("input_asin")
+    if requested:
+        return str(requested)
+    input_value = _decode_nested(record.get("input"))
+    if isinstance(input_value, dict) and input_value.get("asin"):
+        return str(input_value["asin"])
+    return _record_asin(record)
+
+
+
+
+def _category_name(record: dict[str, Any]) -> Any:
+    root = record.get("root_bs_category")
+    if root not in (None, ""):
+        return root
+    categories = _items(record.get("categories"))
+    return categories[-1] if categories else ""
+
+
+
+
+def _product_row(record: dict[str, Any]) -> list[Any]:
+    return [
+        _requested_asin(record), _record_asin(record), record.get("parent_asin"),
+        record.get("title"), record.get("brand"), record.get("model_number"),
+        _first_value(record, "final_price", "initial_price"),
+        record.get("initial_price"), record.get("currency"),
+        record.get("availability"), _human_value(record.get("is_available")),
+        record.get("max_quantity_available"), record.get("seller_name"),
+        record.get("ships_from"), record.get("buybox_seller"),
+        record.get("number_of_sellers"), _human_value(record.get("amazon_prime")),
+        record.get("rating"), record.get("reviews_count"),
+        _first_value(record, "bought_past_month_text", "bought_past_month"),
+        _category_name(record), record.get("root_bs_rank"),
+        _human_value(record.get("amazon_choice")), record.get("product_dimensions"),
+        record.get("item_weight"), record.get("country_of_origin"),
+        _first_value(record, "image_url", "image"),
+        _first_value(record, "url", "origin_url", "input_url"),
+        record.get("timestamp"),
+    ]
+
+
+
+
+def _style_table(
+    worksheet,
+    *,
+    freeze: str = "A2",
+    max_width: int = 36,
+    widths: dict[str, int] | None = None,
+    wrap_headers: set[str] | None = None,
+    hyperlink_headers: set[str] | None = None,
+    number_formats: dict[str, str] | None = None,
+) -> None:
+    """Apply a consistent, readable style to a worksheet table."""
+
+
+    widths = widths or {}
+    wrap_headers = wrap_headers or set()
+    hyperlink_headers = hyperlink_headers or set()
+    number_formats = number_formats or {}
+    worksheet.freeze_panes = freeze
+    worksheet.auto_filter.ref = worksheet.dimensions
+    worksheet.sheet_view.showGridLines = False
+    worksheet.row_dimensions[1].height = 32
+
+
+    headers = [str(cell.value or "") for cell in worksheet[1]]
+    for cell in worksheet[1]:
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.border = HEADER_BORDER
+        cell.alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True
+        )
+
+
+    for row_index in range(2, worksheet.max_row + 1):
+        if row_index % 2 == 0:
+            for cell in worksheet[row_index]:
+                cell.fill = ALTERNATE_FILL
+        for column_index, cell in enumerate(worksheet[row_index], start=1):
+            header = headers[column_index - 1]
+            cell.alignment = Alignment(vertical="top", wrap_text=header in wrap_headers)
+            if header in number_formats and cell.value not in (None, ""):
+                cell.number_format = number_formats[header]
+            if (
+                header in hyperlink_headers
+                and isinstance(cell.value, str)
+                and cell.value.startswith(("http://", "https://"))
+            ):
+                cell.hyperlink = cell.value
+                cell.font = LINK_FONT
+
+
+    for column_index, column_cells in enumerate(worksheet.iter_cols(), start=1):
+        header = headers[column_index - 1]
+        if header in widths:
+            width = widths[header]
+        else:
+            longest = max(
+                (
+                    max((len(line) for line in str(cell.value or "").splitlines()), default=0)
+                    for cell in column_cells[:100]
+                ),
+                default=8,
+            )
+            width = min(longest + 2, max_width)
+        worksheet.column_dimensions[get_column_letter(column_index)].width = max(10, width)
+
+
+
+
+def _use_short_link_labels(worksheet, labels: dict[str, str]) -> None:
+    """Keep links clickable without filling the overview with long URLs."""
+
+
+    headers = [str(cell.value or "") for cell in worksheet[1]]
+    for header, label in labels.items():
+        if header not in headers:
+            continue
+        column = headers.index(header) + 1
+        for row_index in range(2, worksheet.max_row + 1):
+            cell = worksheet.cell(row=row_index, column=column)
+            if not isinstance(cell.value, str) or not cell.value.startswith(
+                ("http://", "https://")
+            ):
+                continue
+            url = cell.value
+            cell.hyperlink = url
+            cell.value = label
+            cell.font = LINK_FONT
+
+
+
+
+def _append_attribute_rows(
+    rows: list[list[Any]], asin: str, value: Any, source: str
+) -> None:
+    value = _decode_nested(value)
+    if value in (None, ""):
+        return
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _append_attribute_rows(rows, asin, item, source)
+        return
+    if isinstance(value, dict):
+        label = _first_value(value, "type", "name", "label", "attribute", "key")
+        if label:
+            detail_value = _first_value(value, "value", "values", "title", "text")
+            if detail_value == "":
+                detail_value = {
+                    key: item for key, item in value.items() if key not in {
+                        "type", "name", "label", "attribute", "key"
+                    }
+                }
+            rows.append([asin, label, _human_value(detail_value), source])
+            return
+        for key, item in value.items():
+            rows.append([asin, key, _human_value(item), source])
+        return
+    rows.append([asin, source, _human_value(value), source])
+
+
+
+
+def _image_url(value: Any) -> str:
+    value = _decode_nested(value)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("url", "image_url", "src", "link"):
+            if value.get(key):
+                return str(value[key])
+    return ""
+
+
+
+
+def _variation_rows(record: dict[str, Any]) -> list[list[Any]]:
+    rows: list[list[Any]] = []
+    asin = _record_asin(record)
+    number = 0
+    for source in ("variations", "variations_values", "variant_attributes"):
+        parsed = _decode_nested(record.get(source))
+        if parsed in (None, ""):
+            continue
+        items = parsed if isinstance(parsed, (list, tuple)) else [parsed]
+        for item in items:
+            if isinstance(item, dict) and not any(
+                key in item
+                for key in (
+                    "asin", "variation_asin", "child_asin", "name", "type",
+                    "attribute", "value", "title", "label",
+                )
+            ):
+                for attribute, value in item.items():
+                    number += 1
+                    rows.append(
+                        [asin, source, number, "", attribute, _human_value(value), ""]
+                    )
+                continue
+
+
+            number += 1
+            if isinstance(item, dict):
+                variation_asin = _first_value(
+                    item, "asin", "variation_asin", "child_asin"
+                )
+                attribute = _first_value(item, "name", "type", "attribute")
+                value = _first_value(item, "value", "title", "label", "values")
+                details = _excel_value(item)
+            else:
+                variation_asin = ""
+                attribute = ""
+                value = _human_value(item)
+                details = ""
+            rows.append(
+                [asin, source, number, variation_asin, attribute, value, details]
+            )
+    return rows
+
+
+
+
+def write_outputs(
+    run_directory: str | Path,
+    *,
+    records: list[dict[str, Any]],
+    audit_rows: list[AsinAuditRow],
+    metadata: dict[str, Any],
+) -> tuple[Path, Path, Path]:
+    """Write raw JSON, metadata, and the organized workbook."""
+
+
+    run_dir = Path(run_directory)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    raw_json_path = run_dir / "brightdata_raw.json"
+    metadata_path = run_dir / "run_metadata.json"
+    workbook_path = run_dir / "amazon_extraction.xlsx"
+    complete_metadata = {
+        "workbook_schema_version": WORKBOOK_SCHEMA_VERSION,
+        "returned_record_count": len(records),
+        **metadata,
+    }
+
+
+    raw_json_path.write_text(
+        json.dumps(records, indent=2, ensure_ascii=False, default=_json_default),
+        encoding="utf-8",
+    )
+    metadata_path.write_text(
+        json.dumps(complete_metadata, indent=2, ensure_ascii=False, default=_json_default),
+        encoding="utf-8",
+    )
+
+
+    workbook = Workbook()
+    workbook.properties.title = "Amazon Data Extraction"
+    workbook.properties.subject = "Bright Data Amazon product extraction"
+
+
+    overview_sheet = workbook.active
+    overview_sheet.title = "Product Overview"
+    overview_sheet.append(PRODUCT_HEADERS)
+    for record in records:
+        overview_sheet.append([_excel_value(value) for value in _product_row(record)])
+    _style_table(
+        overview_sheet,
+        max_width=28,
+        widths={
+            "Requested ASIN": 16, "ASIN": 16, "Parent ASIN": 16,
+            "Complete Amazon Title": 55, "Availability": 20,
+            "Maximum Orderable Quantity": 25, "Bought in Past Month": 24,
+            "Product Dimensions": 24, "Main Image": 18, "Amazon Page": 20,
+            "Collected At": 25,
+        },
+        wrap_headers={
+            "Complete Amazon Title", "Availability", "Bought in Past Month",
+            "Product Dimensions",
+        },
+        hyperlink_headers={"Main Image", "Amazon Page"},
+        number_formats={
+            "Current Price": "#,##0.00", "Original Price": "#,##0.00",
+            "Maximum Orderable Quantity": "#,##0", "Number of Sellers": "#,##0",
+            "Rating": "0.0", "Reviews": "#,##0", "Main Category Rank": "#,##0",
+        },
+    )
+    _use_short_link_labels(
+        overview_sheet,
+        {"Main Image": "Open image", "Amazon Page": "Open Amazon page"},
+    )
+    for row_index in range(2, overview_sheet.max_row + 1):
+        overview_sheet.row_dimensions[row_index].height = 45
+
+
+    bullets_sheet = workbook.create_sheet("Bullets")
+    bullets_sheet.append(["ASIN", "Bullet Number", "Bullet Point"])
+    for record in records:
+        asin = _record_asin(record)
+        for index, bullet in enumerate(_items(record.get("features")), start=1):
+            if isinstance(bullet, dict):
+                bullet = _first_value(bullet, "text", "value", "title") or bullet
+            bullets_sheet.append([asin, index, _human_value(bullet)])
+    _style_table(
+        bullets_sheet,
+        widths={"ASIN": 16, "Bullet Number": 15, "Bullet Point": 110},
+        wrap_headers={"Bullet Point"},
+        number_formats={"Bullet Number": "0"},
+    )
+
+
+    details_sheet = workbook.create_sheet("Product Details")
+    details_sheet.append(["ASIN", "Attribute", "Value", "Source"])
+    detail_rows: list[list[Any]] = []
+    for record in records:
+        asin = _record_asin(record)
+        _append_attribute_rows(
+            detail_rows, asin, record.get("product_details"), "Product Details"
+        )
+        _append_attribute_rows(
+            detail_rows, asin, record.get("variant_attributes"), "Variant Attributes"
+        )
+    unique_detail_rows: list[list[Any]] = []
+    seen_details: set[tuple[str, ...]] = set()
+    for row in detail_rows:
+        identity = tuple(str(value) for value in row)
+        if identity in seen_details:
+            continue
+        seen_details.add(identity)
+        unique_detail_rows.append(row)
+    for row in unique_detail_rows:
+        details_sheet.append([_excel_value(value) for value in row])
+    _style_table(
+        details_sheet,
+        widths={"ASIN": 16, "Attribute": 36, "Value": 70, "Source": 22},
+        wrap_headers={"Value"},
+    )
+
+
+    images_sheet = workbook.create_sheet("Images")
+    images_sheet.append(["ASIN", "Image Number", "Image Type", "Image URL"])
+    for record in records:
+        asin = _record_asin(record)
+        seen: set[str] = set()
+        image_number = 0
+        image_groups = (
+            ("Main", [_first_value(record, "image_url", "image")]),
+            ("Gallery", _items(record.get("images"))),
+            ("Review", _items(record.get("review_images"))),
+        )
+        for image_type, image_values in image_groups:
+            for image_value in image_values:
+                url = _image_url(image_value)
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                image_number += 1
+                images_sheet.append([asin, image_number, image_type, url])
+    _style_table(
+        images_sheet,
+        widths={"ASIN": 16, "Image Number": 15, "Image Type": 15, "Image URL": 100},
+        hyperlink_headers={"Image URL"},
+        number_formats={"Image Number": "0"},
+    )
+
+
+    categories_sheet = workbook.create_sheet("Categories")
+    categories_sheet.append(
+        ["ASIN", "Category Type", "Level", "Category", "Category URL", "Rank"]
+    )
+    for record in records:
+        asin = _record_asin(record)
+        category_tree = _items(record.get("category_tree"))
+        if category_tree:
+            for level, item in enumerate(category_tree, start=1):
+                if isinstance(item, dict):
+                    name = _first_value(item, "name", "category", "title")
+                    url = _first_value(item, "url", "link")
+                else:
+                    name = item
+                    url = ""
+                categories_sheet.append([asin, "Browse Path", level, name, url, ""])
+        else:
+            names = _items(record.get("categories"))
+            urls = _items(record.get("category_urls"))
+            for level, name in enumerate(names, start=1):
+                url = urls[level - 1] if level <= len(urls) else ""
+                categories_sheet.append([asin, "Browse Path", level, name, url, ""])
+
+
+        if record.get("root_bs_category") or record.get("root_bs_rank"):
+            categories_sheet.append(
+                [
+                    asin, "Best Seller Rank", 1, record.get("root_bs_category"), "",
+                    record.get("root_bs_rank"),
+                ]
+            )
+        if record.get("bs_category") or record.get("bs_rank"):
+            categories_sheet.append(
+                [
+                    asin, "Best Seller Rank", 2, record.get("bs_category"), "",
+                    record.get("bs_rank"),
+                ]
+            )
+        recorded_ranks = {
+            (str(record.get("root_bs_category") or ""), str(record.get("root_bs_rank") or "")),
+            (str(record.get("bs_category") or ""), str(record.get("bs_rank") or "")),
+        }
+        for item in _items(record.get("subcategory_rank")):
+            if isinstance(item, dict):
+                subcategory_name = _first_value(
+                    item, "subcategory_name", "name", "category"
+                )
+                subcategory_rank = _first_value(item, "subcategory_rank", "rank")
+                rank_identity = (str(subcategory_name), str(subcategory_rank))
+                if rank_identity in recorded_ranks:
+                    continue
+                recorded_ranks.add(rank_identity)
+                categories_sheet.append(
+                    [
+                        asin, "Best Seller Rank", "", subcategory_name,
+                        _first_value(item, "subcategory_link", "url", "link"),
+                        subcategory_rank,
+                    ]
+                )
+    _style_table(
+        categories_sheet,
+        widths={
+            "ASIN": 16, "Category Type": 20, "Level": 10, "Category": 38,
+            "Category URL": 80, "Rank": 14,
+        },
+        hyperlink_headers={"Category URL"},
+        number_formats={"Level": "0", "Rank": "#,##0"},
+    )
+
+
+    variations_sheet = workbook.create_sheet("Variations")
+    variations_sheet.append(
+        [
+            "ASIN", "Source", "Variation Number", "Variation ASIN", "Attribute",
+            "Value", "Complete Details",
+        ]
+    )
+    for record in records:
+        for row in _variation_rows(record):
+            variations_sheet.append([_excel_value(value) for value in row])
+    _style_table(
+        variations_sheet,
+        widths={
+            "ASIN": 16, "Source": 22, "Variation Number": 18,
+            "Variation ASIN": 18, "Attribute": 28, "Value": 42,
+            "Complete Details": 80,
+        },
+        wrap_headers={"Value", "Complete Details"},
+        number_formats={"Variation Number": "0"},
+    )
+
+
+    sellers_sheet = workbook.create_sheet("Sellers")
+    sellers_sheet.append(
+        [
+            "ASIN", "Offer Type", "Seller", "Seller ID", "Price", "Currency",
+            "Ships From", "Seller Rating", "Number of Ratings", "Delivery", "Seller URL",
+        ]
+    )
+    for record in records:
+        asin = _record_asin(record)
+        main_seller = _first_value(record, "seller_name", "buybox_seller")
+        main_price = _first_value(record, "final_price", "initial_price")
+        if any(
+            record.get(field) not in (None, "")
+            for field in (
+                "seller_name", "seller_id", "buybox_seller", "final_price",
+                "ships_from", "seller_url",
+            )
+        ):
+            offer_type = (
+                "Buy Box"
+                if record.get("buybox_seller")
+                and record.get("buybox_seller") == record.get("seller_name")
+                else "Current Offer"
+            )
+            sellers_sheet.append(
+                [
+                    asin, offer_type, main_seller, record.get("seller_id"), main_price,
+                    record.get("currency"), record.get("ships_from"),
+                    record.get("buybox_seller_rating"), "",
+                    _human_value(record.get("delivery")), record.get("seller_url"),
+                ]
+            )
+        for seller in _items(record.get("other_sellers_prices")):
+            if not isinstance(seller, dict):
+                continue
+            seller_name = _first_value(seller, "seller_name", "seller")
+            seller_price = _first_value(seller, "price", "final_price")
+            if str(seller_name) == str(main_seller) and seller_price == main_price:
+                continue
+            sellers_sheet.append(
+                [
+                    asin, "Other Seller", seller_name,
+                    _first_value(seller, "seller_id", "id"),
+                    seller_price,
+                    _first_value(seller, "currency") or record.get("currency"),
+                    _first_value(seller, "ships_from", "shipper"),
+                    _first_value(seller, "seller_rating", "rating"),
+                    _first_value(seller, "num_of_ratings", "ratings_count"),
+                    _human_value(seller.get("delivery")),
+                    _first_value(seller, "seller_url", "url"),
+                ]
+            )
+    _style_table(
+        sellers_sheet,
+        widths={
+            "ASIN": 16, "Offer Type": 18, "Seller": 28, "Seller ID": 22,
+            "Price": 14, "Currency": 12, "Ships From": 20, "Seller Rating": 16,
+            "Number of Ratings": 18, "Delivery": 60, "Seller URL": 80,
+        },
+        wrap_headers={"Delivery"},
+        hyperlink_headers={"Seller URL"},
+        number_formats={
+            "Price": "#,##0.00", "Seller Rating": "0.0",
+            "Number of Ratings": "#,##0",
+        },
+    )
+
+
+    descriptions_sheet = workbook.create_sheet("Descriptions")
+    descriptions_sheet.append(["ASIN", "Content Type", "Content"])
+    description_fields = (
+        ("description", "Description"),
+        ("product_description", "Product Description"),
+        ("from_the_brand", "From the Brand"),
+        ("customer_says", "Customer Says"),
+        ("customers_say", "Customers Say"),
+        ("top_review", "Top Review"),
+        ("editorial_reviews", "Editorial Reviews"),
+        ("about_the_author", "About the Author"),
+        ("ingredients", "Ingredients"),
+        ("safety_information", "Safety Information"),
+        ("return_policy", "Return Policy"),
+    )
+    for record in records:
+        asin = _record_asin(record)
+        for field, label in description_fields:
+            if record.get(field) not in (None, "", [], {}):
+                descriptions_sheet.append([asin, label, _human_value(record.get(field))])
+    _style_table(
+        descriptions_sheet,
+        widths={"ASIN": 16, "Content Type": 25, "Content": 120},
+        wrap_headers={"Content"},
+    )
+
+
+    data_sheet = workbook.create_sheet("Amazon Data")
+    fields = _ordered_fields(records)
+    data_sheet.append(fields)
+    for record in records:
+        data_sheet.append([_excel_value(record.get(field)) for field in fields])
+    _style_table(data_sheet, max_width=28)
+
+
+    audit_sheet = workbook.create_sheet("Input Audit")
+    audit_sheet.append(
+        ["Source Row", "Original Value", "Normalized ASIN", "Status", "Message"]
+    )
+    for audit_row in audit_rows:
+        values = asdict(audit_row)
+        audit_sheet.append(
+            [
+                _excel_value(values["source_row"]), _excel_value(values["original_value"]),
+                _excel_value(values["normalized_asin"]), _excel_value(values["status"]),
+                _excel_value(values["message"]),
+            ]
+        )
+    _style_table(
+        audit_sheet,
+        widths={
+            "Source Row": 14, "Original Value": 45, "Normalized ASIN": 18,
+            "Status": 16, "Message": 55,
+        },
+        wrap_headers={"Message"},
+        number_formats={"Source Row": "0"},
+    )
+
+
+    error_sheet = workbook.create_sheet("Errors")
+    error_fields = (
+        "input_url", "input_asin", "asin", "error", "error_code", "warning",
+        "warning_code",
+    )
+    error_sheet.append(
+        [
+            "Input URL", "Input ASIN", "Returned ASIN", "Error", "Error Code",
+            "Warning", "Warning Code",
+        ]
+    )
+    for record in records:
+        if record.get("error") or record.get("warning"):
+            error_sheet.append([_excel_value(record.get(field)) for field in error_fields])
+    _style_table(
+        error_sheet,
+        widths={
+            "Input URL": 65, "Input ASIN": 18, "Returned ASIN": 18,
+            "Error": 65, "Error Code": 18, "Warning": 65, "Warning Code": 18,
+        },
+        wrap_headers={"Error", "Warning"},
+        hyperlink_headers={"Input URL"},
+    )
+
+
+    run_sheet = workbook.create_sheet("Run Information")
+    run_sheet.append(["Field", "Value"])
+    for key, value in complete_metadata.items():
+        run_sheet.append(
+            [str(key).replace("_", " ").title(), _human_value(value)]
+        )
+    _style_table(
+        run_sheet,
+        widths={"Field": 32, "Value": 75},
+        wrap_headers={"Value"},
+    )
+
+
+    workbook.active = 0
+    workbook.save(workbook_path)
+    workbook.close()
+    return raw_json_path, workbook_path, metadata_path
+
+===== END FILE: src/amazon_data_extractor/exporter.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/live_records.py =====
+
+"""Turn raw Bright Data product records into simple live-page statuses."""
+
+
+from __future__ import annotations
+
+
+import ast
+from dataclasses import dataclass
+import json
+import re
+from typing import Any, Iterable
+
+
+from .catalog_reader import clean_asin, clean_text
+
+
+
+
+AMAZON_ASIN_IN_URL = re.compile(
+    r"/(?:dp|gp/product|product)/([A-Z0-9]{10})(?:[/?#]|$)",
+    re.IGNORECASE,
+)
+
+
+
+
+@dataclass(frozen=True)
+class LiveProduct:
+    requested_asin: str
+    returned_asin: str
+    title: str
+    bullets: list[str]
+    page_url: str
+    status: str
+    message: str
+
+
+    @property
+    def can_compare(self) -> bool:
+        return self.status == "Found"
+
+
+
+
+def list_values(value: Any) -> list[str]:
+    """Read Bright Data list fields without caring how the provider encoded them."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [clean_text(item) for item in value if clean_text(item)]
+    if isinstance(value, dict):
+        return [clean_text(item) for item in value.values() if clean_text(item)]
+
+
+    text = clean_text(value)
+    if not text:
+        return []
+
+
+    if text[0] in "[{" and text[-1] in "]}":
+        for parser in (json.loads, ast.literal_eval):
+            try:
+                return list_values(parser(text))
+            except (ValueError, SyntaxError, TypeError, json.JSONDecodeError):
+                pass
+
+
+    if "\n" in text or "\r" in text:
+        return [line.strip(" \t-*•") for line in re.split(r"[\r\n]+", text) if line.strip(" \t-*•")]
+    if "•" in text:
+        return [part.strip() for part in text.split("•") if part.strip()]
+    return [text]
+
+
+
+
+def asin_from_url(url: str) -> str:
+    match = AMAZON_ASIN_IN_URL.search(url or "")
+    return clean_asin(match.group(1)) if match else ""
+
+
+
+
+def page_url(record: dict[str, Any]) -> str:
+    for field in ("url", "origin_url", "input_url"):
+        value = clean_text(record.get(field))
+        if value:
+            return value
+    return ""
+
+
+
+
+def record_score(record: dict[str, Any]) -> int:
+    """Prefer the most complete record when Bright Data returns duplicates."""
+    score = 0
+    if not clean_text(record.get("error")):
+        score += 10
+    if clean_text(record.get("title")):
+        score += 5
+    score += min(5, len(list_values(record.get("features"))))
+    if page_url(record):
+        score += 1
+    return score
+
+
+
+
+def index_raw_records(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Index provider rows by the ASIN that was submitted to Bright Data."""
+    indexed: dict[str, dict[str, Any]] = {}
+
+
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+
+
+        requested_asin = clean_asin(record.get("input_asin"))
+        if not requested_asin:
+            requested_asin = asin_from_url(clean_text(record.get("input_url")))
+        if not requested_asin:
+            requested_asin = clean_asin(record.get("asin"))
+        if not requested_asin:
+            continue
+
+
+        previous = indexed.get(requested_asin)
+        if previous is None or record_score(record) > record_score(previous):
+            indexed[requested_asin] = record
+
+
+    return indexed
+
+
+
+
+def build_live_product(requested_asin: str, record: dict[str, Any] | None) -> LiveProduct:
+    """Explain what Bright Data returned for one requested ASIN."""
+    if record is None:
+        return LiveProduct(
+            requested_asin=requested_asin,
+            returned_asin="",
+            title="",
+            bullets=[""] * 5,
+            page_url="",
+            status="Not Found",
+            message="Bright Data returned no record for this ASIN.",
+        )
+
+
+    returned_asin = clean_asin(record.get("asin"))
+    final_url = page_url(record)
+    url_asin = asin_from_url(final_url)
+    error = clean_text(record.get("error"))
+    title = clean_text(record.get("title"))
+    bullets = list_values(record.get("features"))[:5]
+    bullets += [""] * (5 - len(bullets))
+
+
+    if error:
+        return LiveProduct(
+            requested_asin,
+            returned_asin,
+            title,
+            bullets,
+            final_url,
+            "Extraction Failed",
+            error,
+        )
+
+
+    redirect_asin = ""
+    if returned_asin and returned_asin != requested_asin:
+        redirect_asin = returned_asin
+    elif url_asin and url_asin != requested_asin:
+        redirect_asin = url_asin
+
+
+    if redirect_asin:
+        return LiveProduct(
+            requested_asin,
+            redirect_asin,
+            title,
+            bullets,
+            final_url,
+            "Redirected",
+            f"Requested {requested_asin}, but Amazon returned {redirect_asin}.",
+        )
+
+
+    has_product_data = bool(title or any(bullets) or final_url)
+    if not has_product_data:
+        return LiveProduct(
+            requested_asin,
+            returned_asin,
+            title,
+            bullets,
+            final_url,
+            "Not Found",
+            "Bright Data returned a row, but it did not contain live product data.",
+        )
+
+
+    return LiveProduct(
+        requested_asin,
+        returned_asin or requested_asin,
+        title,
+        bullets,
+        final_url,
+        "Found",
+        "Live product returned for the requested ASIN.",
+    )
+
+
+
+
+def build_live_results(
+    records: Iterable[dict[str, Any]],
+    requested_asins: Iterable[str],
+) -> dict[str, LiveProduct]:
+    indexed_records = index_raw_records(records)
+    results = {}
+    for value in requested_asins:
+        asin = clean_asin(value)
+        if asin:
+            results[asin] = build_live_product(asin, indexed_records.get(asin))
+    return results
+
+===== END FILE: src/amazon_data_extractor/live_records.py =====
+
+===== BEGIN FILE: src/amazon_data_extractor/offline_reader.py =====
+
+"""Read a previously generated Amazon extraction workbook for offline comparison."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import re
+from typing import Any
+
+from openpyxl import load_workbook
+
+from .catalog_reader import clean_asin
+
+
+@dataclass(frozen=True)
+class OfflineExtraction:
+    records: list[dict[str, Any]]
+    requested_asins: list[str]
+    data_sheet: str
+
+
+class OfflineWorkbookError(ValueError):
+    pass
+
+
+def normalize_header(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().casefold()).strip()
+
+
+def _headers(worksheet) -> tuple[list[str], dict[str, int]]:
+    values = next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
+    headers = [str(value or "").strip() for value in values]
+    indexes = {}
+    for index, header in enumerate(headers):
+        normalized = normalize_header(header)
+        if normalized and normalized not in indexes:
+            indexes[normalized] = index    return headers, indexes
+
+
+def _requested_asins(workbook) -> list[str]:
+    if "Input Audit" not in workbook.sheetnames:
+        raise OfflineWorkbookError(
+            "The extraction workbook has no 'Input Audit' sheet. "
+            "Choose amazon_extraction.xlsx created by this program."
+        )
+
+    worksheet = workbook["Input Audit"]
+    _header_values, columns = _headers(worksheet)
+    asin_column = columns.get("normalized asin")
+    status_column = columns.get("status")
+    if asin_column is None or status_column is None:
+        raise OfflineWorkbookError(
+            "The 'Input Audit' sheet needs Normalized ASIN and Status columns."
+        )
+
+    requested = []
+    seen = set()
+    for row in worksheet.iter_rows(min_row=2, values_only=True):
+        status = str(row[status_column] or "").strip().casefold()
+        asin = clean_asin(row[asin_column])
+        if status == "accepted" and asin and asin not in seen:
+            seen.add(asin)
+            requested.append(asin)
+
+    if not requested:
+        raise OfflineWorkbookError(
+            "The 'Input Audit' sheet contains no accepted ASINs."
+        )
+    return requested
+
+
+def _records(workbook) -> tuple[list[dict[str, Any]], str]:
+    if "Amazon Data" not in workbook.sheetnames:
+        raise OfflineWorkbookError(
+            "The extraction workbook has no 'Amazon Data' sheet. "
+            "Choose amazon_extraction.xlsx created by this program."
+        )
+
+    worksheet = workbook["Amazon Data"]
+    headers, _columns = _headers(worksheet)
+    if not any(headers):
+        raise OfflineWorkbookError("The 'Amazon Data' sheet has no headers.")
+
+    records = []
+    for row in worksheet.iter_rows(min_row=2, values_only=True):
+        record = {
+            header: row[index] if index < len(row) else None
+            for index, header in enumerate(headers)
+            if header
+        }
+        if any(value not in (None, "") for value in record.values()):
+            records.append(record)
+
+    return records, worksheet.title
+
+
+def read_offline_extraction(path: str | Path) -> OfflineExtraction:
+    path = Path(path)
+    if path.suffix.lower() != ".xlsx":
+        raise OfflineWorkbookError("The Amazon extraction must be an .xlsx workbook.")
+
+    try:
+        workbook = load_workbook(path, read_only=True, data_only=True)
+    except (OSError, ValueError) as exc:
+        raise OfflineWorkbookError(f"Could not open the extraction workbook: {exc}") from exc
+
+    try:
+        requested_asins = _requested_asins(workbook)
+        records, data_sheet = _records(workbook)
+        return OfflineExtraction(records, requested_asins, data_sheet)
+    finally:
+        workbook.close()
+
+===== END FILE: src/amazon_data_extractor/offline_reader.py =====
+
+===== BEGIN FILE: static/app.js =====
+
+(() => {
+  const app = document.querySelector("[data-tab-app]");
+  if (app) {
+    const buttons = [...app.querySelectorAll("[data-tab-button]")];
+    const panels = [...app.querySelectorAll("[data-tab-panel]")];
+    const selectTab = (name) => {
+      const validName = panels.some((panel) => panel.dataset.tabPanel === name) ? name : "live";
+      buttons.forEach((button) => {
+        const selected = button.dataset.tabButton === validName;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-selected", String(selected));
+      });
+      panels.forEach((panel) => {
+        panel.hidden = panel.dataset.tabPanel !== validName;
+      });
+    };
+    buttons.forEach((button) => button.addEventListener("click", () => selectTab(button.dataset.tabButton)));
+    selectTab(app.dataset.initialTab || "live");
+  }
+
+  const exitForm = document.querySelector("[data-exit-form]");
+  if (exitForm) {
+    exitForm.addEventListener("submit", (event) => {
+      if (!window.confirm("Close Amazon Data Extractor?")) {
+        event.preventDefault();
+      }
+    });
+  }
+})();
+
+===== END FILE: static/app.js =====
+
+===== BEGIN FILE: static/style.css =====
+
+:root {
+  color-scheme: light;
+  --ink: #142033;
+  --muted: #5e6b7c;
+  --line: #d9e0e8;
+  --surface: #ffffff;
+  --soft: #f4f7fb;
+  --navy: #173a63;
+  --blue: #276bb0;
+  --danger: #b42318;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--soft); color: var(--ink); }
+a { color: inherit; }
+.app-header { min-height: 74px; padding: 14px clamp(20px, 4vw, 54px); background: var(--navy); color: white; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.brand { font-size: 23px; font-weight: 700; text-decoration: none; }
+.version { margin-left: 8px; color: #cbd9e8; }
+.eyebrow, .step-label { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .11em; color: #5a7799; }
+.app-header .eyebrow { color: #acc4dd; }
+.page-shell { width: min(1180px, calc(100% - 34px)); margin: 32px auto 60px; }
+.hero, .result-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 30px; margin-bottom: 26px; }
+h1 { margin: 0 0 9px; font-size: clamp(29px, 4vw, 45px); line-height: 1.08; }
+h2 { margin: 0 0 16px; font-size: 22px; }
+.lede, .result-heading p { max-width: 780px; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.55; }
+.key-status { min-width: 180px; padding: 14px 16px; border-radius: 12px; background: white; border: 1px solid var(--line); }
+.key-status span { display: block; color: var(--muted); font-size: 13px; }
+.key-status strong { display: block; margin-top: 3px; }
+.status-good strong { color: #217346; }
+.status-warning strong { color: #9a6700; }
+.workspace, .card { background: var(--surface); border: 1px solid var(--line); border-radius: 15px; box-shadow: 0 7px 22px rgba(31, 52, 78, .06); }
+.tabs { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; padding: 14px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-weight: 700; cursor: pointer; }
+.tabs button.active { background: #e8f1fb; color: var(--navy); }
+.tab-panel { padding: clamp(22px, 4vw, 42px); }
+.panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
+.network-badge, .offline-badge { padding: 8px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.network-badge { color: #7a4d00; background: #fff1c9; }
+.offline-badge { color: #17623b; background: #dff4e8; }
+.form-grid { display: grid; gap: 20px; }
+.two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+label { display: grid; gap: 7px; font-weight: 650; }
+label small, .note { color: var(--muted); font-weight: 400; line-height: 1.45; }
+input[type="file"], select { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid #bbc6d2; border-radius: 9px; background: white; font: inherit; }
+.form-actions, .classification-strip { grid-column: 1 / -1; }
+.full-width { grid-column: 1 / -1; }
+.file-field em { color: var(--muted); font-size: 13px; font-style: normal; font-weight: 500; }
+.classification-strip { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; border-radius: 10px; background: var(--soft); }
+.pill { padding: 6px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.exact { background: #e2f0d9 !important; }
+.formatting { background: #ddebf7 !important; }
+.changed { background: #f4cccc !important; }
+.missing { background: #fce4d6 !important; }
+.moved { background: #fce5cd !important; }
+.button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 16px; border: 1px solid transparent; border-radius: 9px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.button-primary { background: var(--blue); color: white; }
+.button-secondary { background: white; color: var(--navy); border-color: #aebcca; }
+.button-danger { background: #fff; color: var(--danger); }
+.flash-stack { margin-bottom: 18px; }
+.flash { padding: 13px 16px; border-radius: 9px; border: 1px solid; }
+.flash-error { color: #842029; background: #f8d7da; border-color: #f1aeb5; }
+.card { padding: 26px; margin-top: 22px; }
+.narrow-card { max-width: 700px; margin: 70px auto; }
+.stat-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+.stat-card { min-height: 105px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: white; }
+.stat-card span { display: block; min-height: 36px; color: var(--muted); font-size: 13px; }
+.stat-card strong { display: block; margin-top: 6px; font-size: 28px; }
+.download-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: var(--navy); color: white; text-align: left; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.resolution-table { min-width: 1020px; }
+.resolution-table th:last-child { min-width: 190px; }
+.resolution-table input[type="text"] { width: 170px; min-height: 40px; padding: 8px 10px; border: 1px solid #9eabba; border-radius: 8px; font: inherit; text-transform: uppercase; }
+.identifier-number { font-family: Consolas, "Courier New", monospace; white-space: nowrap; }
+.asin-entry { display: block; }
+.resolution-actions { display: flex; align-items: center; gap: 16px; margin-top: 22px; }
+.resolution-actions .note { margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.summary-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 22px; }
+.summary-list div { padding: 13px; border-radius: 10px; background: var(--soft); }
+.summary-list dt { color: var(--muted); font-size: 13px; }
+.summary-list dd { margin: 4px 0 0; font-size: 24px; font-weight: 700; }
+.closed-page { min-height: 100vh; display: grid; place-items: center; padding: 25px; }
+.closed-card { max-width: 520px; padding: 48px; text-align: center; border-radius: 16px; background: white; border: 1px solid var(--line); box-shadow: 0 10px 28px rgba(31, 52, 78, .1); }
+.closed-card h1 { font-size: 34px; }
+.closed-card p { color: var(--muted); }
+.closed-icon { width: 56px; height: 56px; margin: 0 auto 17px; border-radius: 50%; background: #dff4e8; color: #17623b; display: grid; place-items: center; font-size: 28px; font-weight: 800; }
+
+@media (max-width: 850px) {
+  .hero, .result-heading { display: grid; }
+  .two-column, .summary-list { grid-template-columns: 1fr; }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .key-status { width: 100%; }
+}
+
+@media (max-width: 520px) {
+  .app-header { align-items: flex-start; }
+  .brand { font-size: 19px; }
+  .tabs { display: grid; }
+  .stat-grid { grid-template-columns: 1fr; }
+  .page-shell { width: min(100% - 22px, 1180px); margin-top: 20px; }
+}
+
+===== END FILE: static/style.css =====
+
+===== BEGIN FILE: templates/base.html =====
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Amazon Data Extractor{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">CATALOG QUALITY TOOL</p>
+      <a class="brand" href="{{ url_for('index') }}">Amazon Data Extractor</a>
+      <span class="version">v{{ version }}</span>
+    </div>
+    <form method="post" action="{{ url_for('exit_program') }}" data-exit-form>
+      <button class="button button-danger" type="submit">Exit Program</button>
+    </form>
+  </header>
+
+  <main class="page-shell">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack" aria-live="polite">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
+
+===== END FILE: templates/base.html =====
+
+===== BEGIN FILE: templates/closed.html =====
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Program closed</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="closed-page">
+  <main class="closed-card">
+    <div class="closed-icon">✓</div>
+    <h1>Program closed</h1>
+    <p>Amazon Data Extractor has stopped. You can close this browser tab.</p>
+  </main>
+</body>
+</html>
+
+===== END FILE: templates/closed.html =====
+
+===== BEGIN FILE: templates/error.html =====
+
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="card narrow-card">
+  <p class="eyebrow">PROGRAM MESSAGE</p>
+  <h1>{{ title }}</h1>
+  <p>{{ message }}</p>
+  <a class="button button-primary" href="{{ url_for('index') }}">Return to the program</a>
+</section>
+{% endblock %}
+
+===== END FILE: templates/error.html =====
+
+===== BEGIN FILE: templates/index.html =====
+
+{% extends "base.html" %}
+{% block title %}Amazon Data Extractor v{{ version }}{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">LIVE DATA + OFFLINE REVIEW</p>
+    <h1>Extract once. Compare safely offline.</h1>
+    <p class="lede">Use ASIN as the primary product identifier. Live Extraction creates the saved Amazon workbook; Offline Compare checks Bullet Points 1–5 and can fall back to SKU, product name, or an ASIN you provide.</p>
+  </div>
+  <div class="key-status {{ 'status-good' if key_found else 'status-warning' }}">
+    <span>Bright Data key</span>
+    <strong>{{ 'Ready' if key_found else 'Not configured' }}</strong>
+  </div>
+</section>
+
+<section class="workspace" data-tab-app data-initial-tab="{{ request.args.get('tab', 'live') }}">
+  <div class="tabs" role="tablist" aria-label="Program mode">
+    <button type="button" role="tab" data-tab-button="live">1. Live Extraction</button>
+    <button type="button" role="tab" data-tab-button="offline">2. Offline Compare</button>
+  </div>
+
+  <div class="tab-panel" role="tabpanel" data-tab-panel="live">
+    <div class="panel-heading">
+      <div>
+        <p class="step-label">STEP 1</p>
+        <h2>Create amazon_extraction.xlsx</h2>
+      </div>
+      <span class="network-badge">Uses Bright Data</span>
+    </div>
+    <form method="post" action="{{ url_for('extract') }}" enctype="multipart/form-data" class="form-grid">
+      <label class="file-field">
+        <span>ASIN Excel workbook</span>
+        <small>.xlsx with an ASIN column</small>
+        <input type="file" name="workbook" accept=".xlsx" required>
+      </label>
+      <label>
+        <span>Extraction mode</span>
+        <select name="mode">
+          <option>Automatic</option>
+          <option>Synchronous</option>
+          <option>Asynchronous</option>
+        </select>
+        <small>Automatic uses synchronous mode for 20 ASINs or fewer.</small>
+      </label>
+      <div class="form-actions">
+        <button class="button button-primary" type="submit">Run Live Extraction</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="tab-panel" role="tabpanel" data-tab-panel="offline">
+    <div class="panel-heading">
+      <div>
+        <p class="step-label">STEP 2</p>
+        <h2>Classify bullet-point differences</h2>
+      </div>
+      <span class="offline-badge">No API call</span>
+    </div>
+    <form method="post" action="{{ url_for('compare_offline') }}" enctype="multipart/form-data" class="form-grid two-column">
+      <label class="file-field">
+        <span>Saved Amazon extraction</span>
+        <small>amazon_extraction.xlsx from Live Extraction</small>
+        <input type="file" name="extraction_workbook" accept=".xlsx" required>
+      </label>
+      <label class="file-field">
+        <span>Category Listings Report</span>
+        <small>.xlsx or .xlsm downloaded from Amazon</small>
+        <input type="file" name="catalog_workbook" accept=".xlsx,.xlsm" required>
+      </label>
+      <label class="file-field full-width">
+        <span>All Listings Report <em>(optional)</em></span>
+        <small>.txt or .tsv — enables ASIN → SKU fallback when the catalog ASIN is blank</small>
+        <input type="file" name="all_listings_file" accept=".txt,.tsv">
+      </label>
+      <div class="classification-strip">
+        <span class="pill exact">Exact Match</span>
+        <span class="pill formatting">Formatting Only</span>
+        <span class="pill changed">Text Changed</span>
+        <span class="pill missing">Missing Live / Catalog</span>
+        <span class="pill moved">Bullet Moved</span>
+      </div>
+      <div class="form-actions">
+        <button class="button button-primary" type="submit">Compare Offline</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+===== END FILE: templates/index.html =====
+
+===== BEGIN FILE: templates/offline_results.html =====
+
+{% extends "base.html" %}
+{% block title %}Offline Comparison Complete{% endblock %}
+{% block content %}
+<section class="result-heading">
+  <div>
+    <p class="eyebrow">OFFLINE COMPARISON COMPLETE</p>
+    <h1>{{ comparison_stats.get('issue_asins', 0) }} ASINs need review</h1>
+    <p>{{ extraction_name }} + {{ catalog_name }}</p>
+  </div>
+  <a class="button button-secondary" href="{{ url_for('index', tab='offline') }}">Compare another pair</a>
+</section>
+
+<section class="stat-grid classifications">
+  <div class="stat-card exact"><span>Exact Match</span><strong>{{ comparison_stats.get('exact_match_rows', 0) }}</strong></div>
+  <div class="stat-card formatting"><span>Formatting Only</span><strong>{{ comparison_stats.get('formatting_only_rows', 0) }}</strong></div>
+  <div class="stat-card changed"><span>Text Changed</span><strong>{{ comparison_stats.get('text_changed_rows', 0) }}</strong></div>
+  <div class="stat-card missing"><span>Missing Live</span><strong>{{ comparison_stats.get('missing_live_rows', 0) }}</strong></div>
+  <div class="stat-card missing"><span>Missing Catalog</span><strong>{{ comparison_stats.get('missing_catalog_rows', 0) }}</strong></div>
+  <div class="stat-card moved"><span>Bullet Moved</span><strong>{{ comparison_stats.get('bullet_moved_rows', 0) }}</strong></div>
+</section>
+
+<section class="card">
+  <h2>Comparison summary</h2>
+  <dl class="summary-list">
+    <div><dt>Requested ASINs recovered</dt><dd>{{ requested_count }}</dd></div>
+    <div><dt>Saved live records read</dt><dd>{{ record_count }}</dd></div>
+    <div><dt>Live ASINs found</dt><dd>{{ comparison_stats.get('found', 0) }}</dd></div>
+    <div><dt>Not found in catalog</dt><dd>{{ comparison_stats.get('not_in_catalog_asins', 0) }}</dd></div>
+    <div><dt>Live extraction problems</dt><dd>{{ comparison_stats.get('catalog_not_live_asins', 0) }}</dd></div>
+    <div><dt>Issue rows</dt><dd>{{ comparison_stats.get('issue_rows', 0) }}</dd></div>
+    <div><dt>ASINs resolved by SKU</dt><dd>{{ comparison_stats.get('catalog_asins_resolved_by_sku', 0) }}</dd></div>
+    <div><dt>ASINs resolved by name</dt><dd>{{ comparison_stats.get('catalog_asins_resolved_by_name', 0) }}</dd></div>
+    <div><dt>ASINs entered by user</dt><dd>{{ comparison_stats.get('catalog_asins_resolved_by_user', 0) }}</dd></div>
+    <div><dt>ASINs left unresolved</dt><dd>{{ comparison_stats.get('catalog_asins_unresolved', 0) }}</dd></div>
+  </dl>
+  <a class="button button-primary" href="{{ url_for('download', run_name=run_name, kind='comparison') }}">Download {{ comparison_name }}</a>
+  <p class="note">Open ASIN Issues for the short list, Bullet Results for every classification, and Difference Details for review-only rows. In Difference Details, ASIN is directly beside Product Name.</p>
+</section>
+{% endblock %}
+
+===== END FILE: templates/offline_results.html =====
+
+===== BEGIN FILE: templates/resolve_asins.html =====
+
+{% extends "base.html" %}
+{% block title %}ASINs Needed{% endblock %}
+{% block content %}
+<section class="result-heading">
+  <div>
+    <p class="eyebrow">ASIN CONFIRMATION</p>
+    <h1>{{ unresolved|length }} catalog rows still need an ASIN</h1>
+    <p>The program already tried SKU and a unique product-name match. Enter an ASIN where you know it; the identifier number, SKU, and product name are shown for reference.</p>
+  </div>
+</section>
+
+{% if validation_error %}
+  <div class="flash flash-error" role="alert">{{ validation_error }}</div>
+{% endif %}
+
+<section class="card">
+  <h2>Automatic resolution</h2>
+  <dl class="summary-list">
+    <div><dt>Resolved by SKU</dt><dd>{{ automatic_stats.get('catalog_asins_resolved_by_sku', 0) }}</dd></div>
+    <div><dt>Resolved by product name</dt><dd>{{ automatic_stats.get('catalog_asins_resolved_by_name', 0) }}</dd></div>
+    <div><dt>Still unresolved</dt><dd>{{ unresolved|length }}</dd></div>
+  </dl>
+</section>
+
+<form class="card" method="post" action="{{ url_for('resolve_asins', run_name=run_name) }}">
+  <input type="hidden" name="extraction_name" value="{{ extraction_name }}">
+  <input type="hidden" name="catalog_name" value="{{ catalog_name }}">
+  <input type="hidden" name="all_listings_name" value="{{ all_listings_name }}">
+  <div class="table-wrap">
+    <table class="resolution-table">
+      <thead>
+        <tr>
+          <th>Identifier Type</th>
+          <th>Identifier Number</th>
+          <th>SKU</th>
+          <th>Product Name</th>
+          <th>ASIN</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for product in unresolved %}
+          <tr>
+            <td>{{ product.identifier_type or 'Unknown' }}</td>
+            <td class="identifier-number">{{ product.identifier_value or '(blank)' }}</td>
+            <td>{{ product.sku or '(blank)' }}</td>
+            <td>{{ product.product_name or '(blank)' }}</td>
+            <td>
+              <label class="asin-entry">
+                <span class="sr-only">ASIN for catalog row {{ product.source_row }}</span>
+                <input
+                  type="text"
+                  name="asin_{{ product.source_row }}"
+                  value="{{ entered_values.get(product.source_row, '') }}"
+                  maxlength="10"
+                  pattern="[A-Za-z0-9]{10}"
+                  placeholder="10-character ASIN"
+                  autocomplete="off"
+                >
+              </label>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="form-actions resolution-actions">
+    <button class="button button-primary" type="submit">Continue Comparison</button>
+    <p class="note">You may leave a field blank. That row will be preserved on the report's ASIN Needed sheet with its identifier number.</p>
+  </div>
+</form>
+{% endblock %}
+
+===== END FILE: templates/resolve_asins.html =====
+
+===== BEGIN FILE: templates/results.html =====
+
+{% extends "base.html" %}
+{% block title %}Live Extraction Complete{% endblock %}
+{% block content %}
+<section class="result-heading">
+  <div>
+    <p class="eyebrow">LIVE EXTRACTION COMPLETE</p>
+    <h1>{{ asin_count }} requested ASINs processed</h1>
+    <p>{{ source_workbook }} · {{ mode|capitalize }} mode · {{ record_count }} returned records</p>
+  </div>
+  <a class="button button-secondary" href="{{ url_for('index', tab='offline') }}">Go to Offline Compare</a>
+</section>
+
+<section class="stat-grid">
+  {% for label in ['Found', 'Redirected', 'Not Found', 'Extraction Failed'] %}
+    <div class="stat-card">
+      <span>{{ label }}</span>
+      <strong>{{ live_summary.counts.get(label, 0) }}</strong>
+    </div>
+  {% endfor %}
+  <div class="stat-card"><span>Invalid rows</span><strong>{{ invalid_count }}</strong></div>
+  <div class="stat-card"><span>Duplicates removed</span><strong>{{ duplicate_count }}</strong></div>
+</section>
+
+<section class="card">
+  <h2>Downloads</h2>
+  <div class="download-row">
+    <a class="button button-primary" href="{{ url_for('download', run_name=run_name, kind='excel') }}">Download {{ workbook_name }}</a>
+    <a class="button button-secondary" href="{{ url_for('download', run_name=run_name, kind='json') }}">Raw JSON</a>
+    <a class="button button-secondary" href="{{ url_for('download', run_name=run_name, kind='metadata') }}">Run metadata</a>
+  </div>
+  <p class="note">Use {{ workbook_name }} in the Offline Compare tab. The original requested ASINs are retained in its Input Audit sheet.</p>
+</section>
+
+{% if live_summary.problems %}
+<section class="card">
+  <h2>Live extraction problems</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Requested ASIN</th><th>Returned ASIN</th><th>Status</th><th>What happened</th></tr></thead>
+      <tbody>
+      {% for product in live_summary.problems %}
+        <tr><td>{{ product.requested_asin }}</td><td>{{ product.returned_asin or '—' }}</td><td>{{ product.status }}</td><td>{{ product.message }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if preview %}
+<section class="card">
+  <h2>Preview</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>ASIN</th><th>Title</th><th>Price</th><th>Availability</th><th>Seller</th></tr></thead>
+      <tbody>
+      {% for item in preview %}
+        <tr><td>{{ item.asin }}</td><td>{{ item.title }}</td><td>{{ item.price }}</td><td>{{ item.availability }}</td><td>{{ item.seller }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+
+===== END FILE: templates/results.html =====
+
+===== BEGIN FILE: tests/test_app.py =====
+
+from __future__ import annotations
+
+from io import BytesIO
+import json
+import re
+import tempfile
+import unittest
+from pathlib import Path
+
+from openpyxl import Workbook, load_workbook
+
+from app import create_app
+
+
+ASIN = "B000000001"
+
+
+def workbook_bytes(build_workbook) -> BytesIO:
+    with tempfile.NamedTemporaryFile(suffix=".xlsx") as temp_file:
+        build_workbook.save(temp_file.name)
+        return BytesIO(Path(temp_file.name).read_bytes())
+
+
+def extraction_file() -> BytesIO:
+    workbook = Workbook()
+    data = workbook.active
+    data.title = "Amazon Data"
+    data.append(["input_asin", "asin", "title", "features", "url"])
+    data.append(
+        [
+            ASIN,
+            ASIN,
+            "Example Product",
+            json.dumps(["Exact bullet", "Live wording"]),
+            f"https://www.amazon.com/dp/{ASIN}",
+        ]
+    )
+    audit = workbook.create_sheet("Input Audit")
+    audit.append(["Source Row", "Original Value", "Normalized ASIN", "Status", "Message"])
+    audit.append([2, ASIN, ASIN, "ACCEPTED", ""])
+    return workbook_bytes(workbook)
+
+
+def catalog_file() -> BytesIO:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Template"
+    sheet.append(
+        ["SKU", "ASIN", "Title", "Bullet Point", "Bullet Point", "Bullet Point", "Bullet Point", "Bullet Point"]
+    )
+    sheet.append(["SKU-001", ASIN, "Example Product", "Exact bullet", "Catalog wording", "", "", ""])
+    return workbook_bytes(workbook)
+
+
+def catalog_missing_asin_file() -> BytesIO:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Catalog Data"
+    sheet.append(
+        [
+            "SKU",
+            "Product ID Type",
+            "Product ID",
+            "Product Name",
+            "Bullet Point 1",
+            "Bullet Point 2",
+        ]
+    )
+    sheet.append(
+        [
+            "SKU-NEEDS-ASIN",
+            "EAN",
+            "00850072092171",
+            "Catalog Product",
+            "Exact bullet",
+            "Catalog wording",
+        ]
+    )
+    return workbook_bytes(workbook)
+
+
+class AppTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.exit_calls = []
+        self.app = create_app(
+            {
+                "TESTING": True,
+                "PROJECT_DIR": Path(self.temp_dir.name),
+                "SECRET_KEY": "test-key",
+                "EXIT_SCHEDULER": lambda: self.exit_calls.append("scheduled"),
+            }
+        )
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_index_contains_both_tabs(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Live Extraction", response.data)
+        self.assertIn(b"Offline Compare", response.data)
+        self.assertIn(b"All Listings Report", response.data)
+
+    def test_exit_route_schedules_process_stop(self):
+        response = self.client.post("/exit", environ_base={"REMOTE_ADDR": "127.0.0.1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.exit_calls, ["scheduled"])
+        self.assertIn(b"Program closed", response.data)
+
+    def test_offline_compare_creates_classified_report(self):
+        response = self.client.post(
+            "/compare",
+            data={
+                "extraction_workbook": (extraction_file(), "amazon_extraction.xlsx"),
+                "catalog_workbook": (catalog_file(), "category_listings.xlsx"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"OFFLINE COMPARISON COMPLETE", response.data)
+
+        reports = list(Path(self.temp_dir.name).glob("output/amazon_comparison_*/comparison_report.xlsx"))
+        self.assertEqual(len(reports), 1)
+        workbook = load_workbook(reports[0], data_only=True)
+        try:
+            statuses = [
+                row[7].value
+                for row in workbook["Bullet Results"].iter_rows(min_row=2)
+            ]
+            self.assertEqual(statuses, ["Exact Match", "Text Changed"])
+        finally:
+            workbook.close()
+
+    def test_missing_catalog_asin_asks_user_and_shows_identifier(self):
+        response = self.client.post(
+            "/compare",
+            data={
+                "extraction_workbook": (extraction_file(), "amazon_extraction.xlsx"),
+                "catalog_workbook": (
+                    catalog_missing_asin_file(),
+                    "category_listings.xlsx",
+                ),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"ASIN CONFIRMATION", response.data)
+        self.assertIn(b"00850072092171", response.data)
+        self.assertIn(b"SKU-NEEDS-ASIN", response.data)
+
+        match = re.search(rb'action="/compare/([^/]+)/resolve"', response.data)
+        self.assertIsNotNone(match)
+        run_name = match.group(1).decode()
+        response = self.client.post(
+            f"/compare/{run_name}/resolve",
+            data={
+                "asin_2": ASIN,
+                "extraction_name": "amazon_extraction.xlsx",
+                "catalog_name": "category_listings.xlsx",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"OFFLINE COMPARISON COMPLETE", response.data)
+
+        report_path = (
+            Path(self.temp_dir.name)
+            / "output"
+            / run_name
+            / "comparison_report.xlsx"
+        )
+        workbook = load_workbook(report_path, data_only=True)
+        try:
+            details = workbook["Difference Details"]
+            self.assertEqual(details["A1"].value, "ASIN")
+            self.assertEqual(details["B1"].value, "Product Name")
+            self.assertEqual(details["A2"].value, ASIN)
+            self.assertEqual(details["B2"].value, "Catalog Product")
+        finally:
+            workbook.close()
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+===== END FILE: tests/test_app.py =====
+
+===== BEGIN FILE: tests/test_comparator.py =====
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from openpyxl import load_workbook
+
+from amazon_data_extractor.all_listings import AllListingsIndex
+from amazon_data_extractor.catalog_reader import CatalogProduct, build_catalog_data
+from amazon_data_extractor.comparator import (
+    BULLET_MOVED,
+    EXACT_MATCH,
+    FORMATTING_ONLY,
+    MISSING_CATALOG,
+    MISSING_LIVE,
+    TEXT_CHANGED,
+    ComparisonResult,
+    compare_bullets,
+    resolve_catalog_asins,
+)
+from amazon_data_extractor.comparison_report import write_comparison_report
+from amazon_data_extractor.live_records import LiveProduct
+
+
+ASIN = "B000000001"
+
+
+def live(*bullets: str) -> LiveProduct:
+    values = (list(bullets) + [""] * 5)[:5]
+    return LiveProduct(
+        requested_asin=ASIN,
+        returned_asin=ASIN,
+        title="Example Product",
+        bullets=values,
+        page_url=f"https://www.amazon.com/dp/{ASIN}",
+        status="Found",
+        message="Found",
+    )
+
+
+def catalog(*bullets: str) -> CatalogProduct:
+    return CatalogProduct(
+        asin=ASIN,
+        sku="SKU-001",
+        product_name="Example Product",
+        bullets=(list(bullets) + [""] * 5)[:5],
+    )
+
+
+class ComparatorTests(unittest.TestCase):
+    def test_classifies_exact_formatting_changed_and_missing(self):
+        results = compare_bullets(
+            live("Exact", "fast charging", "Battery 4500", "", "Live only"),
+            catalog("Exact", "FAST charging.", "Battery 5000", "Catalog only", ""),
+        )
+        self.assertEqual(
+            [item.status for item in results],
+            [EXACT_MATCH, FORMATTING_ONLY, TEXT_CHANGED, MISSING_LIVE, MISSING_CATALOG],
+        )
+
+    def test_detects_a_swap_as_two_moves_without_text_changes(self):
+        results = compare_bullets(live("Second", "First"), catalog("First", "Second"))
+        self.assertEqual([item.status for item in results], [BULLET_MOVED, BULLET_MOVED])
+        self.assertEqual(
+            {(item.catalog_position, item.live_position) for item in results},
+            {(1, 2), (2, 1)},
+        )
+
+    def test_detects_inserted_live_bullet_without_double_counting(self):
+        results = compare_bullets(live("First", "Inserted", "Second"), catalog("First", "Second"))
+        self.assertEqual(
+            [item.status for item in results],
+            [EXACT_MATCH, MISSING_CATALOG, BULLET_MOVED],
+        )
+
+    def test_report_contains_all_and_review_only_sheets(self):
+        comparisons = compare_bullets(
+            live("Exact", "Different live"),
+            catalog("Exact", "Different catalog"),
+        )
+        result = ComparisonResult(
+            comparisons=comparisons,
+            live_problems=[],
+            not_in_catalog=[],
+            stats={},
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "comparison_report.xlsx"
+            write_comparison_report(report_path, result)
+            workbook = load_workbook(report_path, data_only=True)
+            try:
+                self.assertEqual(
+                    workbook.sheetnames,
+                    [
+                        "ASIN Issues",
+                        "Bullet Results",
+                        "Difference Details",
+                        "ASIN Needed",
+                        "Not Found in Catalog",
+                        "Live Extraction Problems",
+                        "Read Me",
+                    ],
+                )
+                all_statuses = [
+                    row[7].value
+                    for row in workbook["Bullet Results"].iter_rows(min_row=2)
+                ]
+                issue_statuses = [
+                    row[7].value
+                    for row in workbook["Difference Details"].iter_rows(min_row=2)
+                ]
+                self.assertEqual(all_statuses, [EXACT_MATCH, TEXT_CHANGED])
+                self.assertEqual(issue_statuses, [TEXT_CHANGED])
+                details = workbook["Difference Details"]
+                self.assertEqual(details["A1"].value, "ASIN")
+                self.assertEqual(details["B1"].value, "Product Name")
+                self.assertEqual(details["A2"].value, ASIN)
+                self.assertEqual(details["B2"].value, "Example Product")
+            finally:
+                workbook.close()
+
+    def test_resolves_blank_asins_by_sku_name_then_user(self):
+        products = [
+            CatalogProduct(
+                "",
+                "SKU-BRIDGE",
+                "Different Name",
+                [""] * 5,
+                "EAN",
+                "1000000000001",
+                "",
+                7,
+            ),
+            CatalogProduct(
+                "",
+                "SKU-NAME",
+                "Example Product",
+                [""] * 5,
+                "GTIN",
+                "1000000000002",
+                "",
+                8,
+            ),
+            CatalogProduct(
+                "",
+                "SKU-USER",
+                "Ambiguous Name",
+                [""] * 5,
+                "EAN",
+                "1000000000003",
+                "",
+                9,
+            ),
+        ]
+        catalog_data = build_catalog_data(products, sheet_name="Template")
+        listings = AllListingsIndex(
+            asin_to_skus={ASIN: ["SKU-BRIDGE"]},
+            sku_to_asin={"sku-bridge": ASIN},
+            row_count=1,
+        )
+
+        resolved, stats, unresolved = resolve_catalog_asins(
+            catalog_data,
+            {ASIN: live("One")},
+            listings,
+            {9: "B000000009"},
+        )
+
+        self.assertEqual(
+            [product.asin for product in resolved.products],
+            [ASIN, ASIN, "B000000009"],
+        )
+        self.assertEqual(stats["catalog_asins_resolved_by_sku"], 1)
+        self.assertEqual(stats["catalog_asins_resolved_by_name"], 1)
+        self.assertEqual(stats["catalog_asins_resolved_by_user"], 1)
+        self.assertEqual(unresolved, [])
+
+    def test_asin_needed_preserves_identifier_number(self):
+        unresolved = CatalogProduct(
+            "",
+            "SKU-NEEDS-ASIN",
+            "Needs ASIN",
+            [""] * 5,
+            "EAN",
+            "00850072092171",
+            "",
+            17,
+        )
+        result = ComparisonResult([], [], [], {}, [unresolved])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "comparison_report.xlsx"
+            write_comparison_report(report_path, result)
+            workbook = load_workbook(report_path, data_only=True)
+            try:
+                row = next(
+                    workbook["ASIN Needed"].iter_rows(
+                        min_row=2, max_row=2, values_only=True
+                    )
+                )
+                self.assertEqual(
+                    row[:4],
+                    ("EAN", "00850072092171", "SKU-NEEDS-ASIN", "Needs ASIN"),
+                )
+            finally:
+                workbook.close()
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+===== END FILE: tests/test_comparator.py =====
+
+===== BEGIN FILE: tests/test_offline_reader.py =====
+
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from openpyxl import Workbook
+
+from amazon_data_extractor.offline_reader import OfflineWorkbookError, read_offline_extraction
+
+class OfflineReaderTests(unittest.TestCase):
+    def test_reads_records_and_accepted_asins(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "amazon_extraction.xlsx"
+            workbook = Workbook()
+            data = workbook.active
+            data.title = "Amazon Data"
+            data.append(["input_asin", "asin", "title", "features"])
+            data.append(["B000000001", "B000000001", "Example", json.dumps(["One", "Two"])])
+            audit = workbook.create_sheet("Input Audit")
+            audit.append(["Source Row", "Original Value", "Normalized ASIN", "Status", "Message"])
+            audit.append([2, "B000000001", "B000000001", "ACCEPTED", ""])
+            audit.append([3, "B000000001", "B000000001", "DUPLICATE", "Earlier row"])
+            workbook.save(path)
+
+            result = read_offline_extraction(path)
+            self.assertEqual(result.requested_asins, ["B000000001"])
+            self.assertEqual(len(result.records), 1)
+            self.assertEqual(result.records[0]["title"], "Example")
+
+    def test_rejects_unrelated_workbook(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "other.xlsx"
+            workbook = Workbook()
+            workbook.save(path)
+            with self.assertRaisesRegex(OfflineWorkbookError, "Input Audit"):
+                read_offline_extraction(path)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+===== END FILE: tests/test_offline_reader.py =====

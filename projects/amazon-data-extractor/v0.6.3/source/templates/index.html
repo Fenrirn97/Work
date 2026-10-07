@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Amazon Data Extractor v{{ version }}{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">LIVE DATA + OFFLINE REVIEW</p>
+    <h1>Extract once. Compare safely offline.</h1>
+    <p class="lede">Use ASIN as the primary product identifier. Live Extraction creates the saved Amazon workbook; Offline Compare checks Bullet Points 1–5 and can fall back to SKU, product name, or an ASIN you provide.</p>
+  </div>
+  <div class="key-status {{ 'status-good' if key_found else 'status-warning' }}">
+    <span>Bright Data key</span>
+    <strong>{{ 'Ready' if key_found else 'Not configured' }}</strong>
+  </div>
+</section>
+
+<section class="workspace" data-tab-app data-initial-tab="{{ request.args.get('tab', 'live') }}">
+  <div class="tabs" role="tablist" aria-label="Program mode">
+    <button type="button" role="tab" data-tab-button="live">1. Live Extraction</button>
+    <button type="button" role="tab" data-tab-button="offline">2. Offline Compare</button>
+  </div>
+
+  <div class="tab-panel" role="tabpanel" data-tab-panel="live">
+    <div class="panel-heading">
+      <div>
+        <p class="step-label">STEP 1</p>
+        <h2>Create amazon_extraction.xlsx</h2>
+      </div>
+      <span class="network-badge">Uses Bright Data</span>
+    </div>
+    <form method="post" action="{{ url_for('extract') }}" enctype="multipart/form-data" class="form-grid">
+      <label class="file-field">
+        <span>ASIN Excel workbook</span>
+        <small>.xlsx with an ASIN column</small>
+        <input type="file" name="workbook" accept=".xlsx" required>
+      </label>
+      <label>
+        <span>Extraction mode</span>
+        <select name="mode">
+          <option>Automatic</option>
+          <option>Synchronous</option>
+          <option>Asynchronous</option>
+        </select>
+        <small>Automatic uses synchronous mode for 20 ASINs or fewer.</small>
+      </label>
+      <div class="form-actions">
+        <button class="button button-primary" type="submit">Run Live Extraction</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="tab-panel" role="tabpanel" data-tab-panel="offline">
+    <div class="panel-heading">
+      <div>
+        <p class="step-label">STEP 2</p>
+        <h2>Classify bullet-point differences</h2>
+      </div>
+      <span class="offline-badge">No API call</span>
+    </div>
+    <form method="post" action="{{ url_for('compare_offline') }}" enctype="multipart/form-data" class="form-grid two-column">
+      <label class="file-field">
+        <span>Saved Amazon extraction</span>
+        <small>amazon_extraction.xlsx from Live Extraction</small>
+        <input type="file" name="extraction_workbook" accept=".xlsx" required>
+      </label>
+      <label class="file-field">
+        <span>Category Listings Report</span>
+        <small>.xlsx or .xlsm downloaded from Amazon</small>
+        <input type="file" name="catalog_workbook" accept=".xlsx,.xlsm" required>
+      </label>
+      <label class="file-field full-width">
+        <span>All Listings Report <em>(optional)</em></span>
+        <small>.txt or .tsv — enables ASIN → SKU fallback when the catalog ASIN is blank</small>
+        <input type="file" name="all_listings_file" accept=".txt,.tsv">
+      </label>
+      <div class="classification-strip">
+        <span class="pill exact">Exact Match</span>
+        <span class="pill formatting">Formatting Only</span>
+        <span class="pill changed">Text Changed</span>
+        <span class="pill missing">Missing Live / Catalog</span>
+        <span class="pill moved">Bullet Moved</span>
+      </div>
+      <div class="form-actions">
+        <button class="button button-primary" type="submit">Compare Offline</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

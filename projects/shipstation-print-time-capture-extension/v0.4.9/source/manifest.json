@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "ShipStation Print Time Capture",
+  "version": "0.4.9",
+  "description": "Reads ShipStation Shipment #, Order #, Tracking # and Label Printed, sends captures to the local checker, and can export a plain-text diagnostic report for troubleshooting.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://*.shipstation.com/*",
+    "http://127.0.0.1:8787/*"
+  ],
+  "action": {
+    "default_title": "ShipStation Print Time Capture",
+    "default_popup": "popup.html"
+  }
+}

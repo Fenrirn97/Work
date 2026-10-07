@@ -1,0 +1,278 @@
+
+:root {
+    color-scheme: light;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #1f2933;
+    background: #eef2f5;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 30px;
+    padding: 34px max(5vw, 24px);
+    color: white;
+    background: #174c3c;
+}
+
+h1,
+h2,
+p {
+    margin-top: 0;
+}
+
+header p {
+    max-width: 720px;
+    margin-bottom: 0;
+    line-height: 1.55;
+}
+
+.small-title {
+    color: #d8b35c;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+main {
+    width: min(900px, 92vw);
+    margin: 28px auto 50px;
+}
+
+.card {
+    margin-bottom: 20px;
+    padding: 26px;
+    border: 1px solid #d2d9df;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 5px 18px rgba(31, 41, 51, 0.06);
+}
+
+form {
+    display: grid;
+    gap: 12px;
+}
+
+label {
+    margin-top: 8px;
+    font-weight: bold;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #aeb8c2;
+    border-radius: 7px;
+    font: inherit;
+}
+
+button {
+    padding: 12px 18px;
+    border: 0;
+    border-radius: 7px;
+    font: inherit;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.main-button {
+    margin-top: 12px;
+    color: white;
+    background: #174c3c;
+}
+
+.exit-button {
+    min-width: 130px;
+    color: white;
+    background: #a83232;
+}
+
+.progress-track {
+    height: 12px;
+    margin: 18px 0;
+    overflow: hidden;
+    border-radius: 20px;
+    background: #dfe5e9;
+}
+
+.progress-bar {
+    width: 0;
+    height: 100%;
+    background: #d8a83e;
+    transition: width 0.25s ease;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+
+.status-grid div {
+    padding: 12px;
+    border-radius: 7px;
+    background: #f2f5f6;
+}
+
+.status-grid span,
+.status-grid strong {
+    display: block;
+}
+
+.status-grid span {
+    margin-bottom: 5px;
+    color: #64717d;
+    font-size: 12px;
+}
+
+.information-card p {
+    line-height: 1.55;
+}
+
+.success-message {
+    color: #17633d;
+    font-weight: bold;
+}
+
+.error-message {
+    color: #9f2626;
+    font-weight: bold;
+}
+
+.closed-message {
+    margin-top: 80px;
+    text-align: center;
+}
+
+@media (max-width: 650px) {
+    header {
+        flex-direction: column;
+    }
+
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.priority-card {
+    border: 2px solid #d6e1e8;
+}
+
+.section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.step-label {
+    margin: 0 0 6px;
+    color: #64717d;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.priority-pill {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #edf4f7;
+    color: #31576d;    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.compact-list {
+    margin: 14px 0 18px;
+    padding-left: 22px;
+    line-height: 1.5;
+}
+
+.button-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.secondary-button {
+    border: 1px solid #9fb1be;
+    border-radius: 7px;
+    padding: 11px 16px;
+    background: #f7f9fa;
+    color: #263746;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.secondary-button:hover:not(:disabled) {
+    background: #edf2f5;
+}
+
+.secondary-button:disabled,
+.main-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.capture-message {
+    margin: 16px 0 12px;
+}
+
+.warning-message {
+    color: #81590d;
+    font-weight: 700;
+}
+
+.capture-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.capture-grid div {
+    padding: 11px 12px;
+    border-radius: 7px;
+    background: #f5f7f8;
+}
+
+.capture-grid span,
+.capture-grid strong {
+    display: block;
+}
+
+.capture-grid span {
+    margin-bottom: 5px;
+    color: #64717d;
+    font-size: 12px;
+}
+
+@media (max-width: 800px) {
+    .capture-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 650px) {
+    .section-heading {
+        flex-direction: column;
+    }
+
+    .capture-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Offline Comparison Complete{% endblock %}
+{% block content %}
+<section class="result-heading">
+  <div>
+    <p class="eyebrow">OFFLINE COMPARISON COMPLETE</p>
+    <h1>{{ comparison_stats.get('issue_asins', 0) }} ASINs need review</h1>
+    <p>{{ extraction_name }} + {{ catalog_name }}</p>
+  </div>
+  <a class="button button-secondary" href="{{ url_for('index', tab='offline') }}">Compare another pair</a>
+</section>
+
+<section class="stat-grid classifications">
+  <div class="stat-card exact"><span>Exact Match</span><strong>{{ comparison_stats.get('exact_match_rows', 0) }}</strong></div>
+  <div class="stat-card formatting"><span>Formatting Only</span><strong>{{ comparison_stats.get('formatting_only_rows', 0) }}</strong></div>
+  <div class="stat-card changed"><span>Text Changed</span><strong>{{ comparison_stats.get('text_changed_rows', 0) }}</strong></div>
+  <div class="stat-card missing"><span>Missing Live</span><strong>{{ comparison_stats.get('missing_live_rows', 0) }}</strong></div>
+  <div class="stat-card missing"><span>Missing Catalog</span><strong>{{ comparison_stats.get('missing_catalog_rows', 0) }}</strong></div>
+  <div class="stat-card moved"><span>Bullet Moved</span><strong>{{ comparison_stats.get('bullet_moved_rows', 0) }}</strong></div>
+</section>
+
+<section class="card">
+  <h2>Comparison summary</h2>
+  <dl class="summary-list">
+    <div><dt>Requested ASINs recovered</dt><dd>{{ requested_count }}</dd></div>
+    <div><dt>Saved live records read</dt><dd>{{ record_count }}</dd></div>
+    <div><dt>Live ASINs found</dt><dd>{{ comparison_stats.get('found', 0) }}</dd></div>
+    <div><dt>Not found in catalog</dt><dd>{{ comparison_stats.get('not_in_catalog_asins', 0) }}</dd></div>
+    <div><dt>Live extraction problems</dt><dd>{{ comparison_stats.get('catalog_not_live_asins', 0) }}</dd></div>
+    <div><dt>Issue rows</dt><dd>{{ comparison_stats.get('issue_rows', 0) }}</dd></div>
+    <div><dt>ASINs resolved by SKU</dt><dd>{{ comparison_stats.get('catalog_asins_resolved_by_sku', 0) }}</dd></div>
+    <div><dt>ASINs resolved by name</dt><dd>{{ comparison_stats.get('catalog_asins_resolved_by_name', 0) }}</dd></div>
+    <div><dt>ASINs entered by user</dt><dd>{{ comparison_stats.get('catalog_asins_resolved_by_user', 0) }}</dd></div>
+    <div><dt>ASINs left unresolved</dt><dd>{{ comparison_stats.get('catalog_asins_unresolved', 0) }}</dd></div>
+  </dl>
+  <a class="button button-primary" href="{{ url_for('download', run_name=run_name, kind='comparison') }}">Download {{ comparison_name }}</a>
+  <p class="note">Open ASIN Issues for the short list, Bullet Results for every classification, and Difference Details for review-only rows. In Difference Details, ASIN is directly beside Product Name.</p>
+</section>
+{% endblock %}

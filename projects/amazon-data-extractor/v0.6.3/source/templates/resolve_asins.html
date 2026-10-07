@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}ASINs Needed{% endblock %}
+{% block content %}
+<section class="result-heading">
+  <div>
+    <p class="eyebrow">ASIN CONFIRMATION</p>
+    <h1>{{ unresolved|length }} catalog rows still need an ASIN</h1>
+    <p>The program already tried SKU and a unique product-name match. Enter an ASIN where you know it; the identifier number, SKU, and product name are shown for reference.</p>
+  </div>
+</section>
+
+{% if validation_error %}
+  <div class="flash flash-error" role="alert">{{ validation_error }}</div>
+{% endif %}
+
+<section class="card">
+  <h2>Automatic resolution</h2>
+  <dl class="summary-list">
+    <div><dt>Resolved by SKU</dt><dd>{{ automatic_stats.get('catalog_asins_resolved_by_sku', 0) }}</dd></div>
+    <div><dt>Resolved by product name</dt><dd>{{ automatic_stats.get('catalog_asins_resolved_by_name', 0) }}</dd></div>
+    <div><dt>Still unresolved</dt><dd>{{ unresolved|length }}</dd></div>
+  </dl>
+</section>
+
+<form class="card" method="post" action="{{ url_for('resolve_asins', run_name=run_name) }}">
+  <input type="hidden" name="extraction_name" value="{{ extraction_name }}">
+  <input type="hidden" name="catalog_name" value="{{ catalog_name }}">
+  <input type="hidden" name="all_listings_name" value="{{ all_listings_name }}">
+  <div class="table-wrap">
+    <table class="resolution-table">
+      <thead>
+        <tr>
+          <th>Identifier Type</th>
+          <th>Identifier Number</th>
+          <th>SKU</th>
+          <th>Product Name</th>
+          <th>ASIN</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for product in unresolved %}
+          <tr>
+            <td>{{ product.identifier_type or 'Unknown' }}</td>
+            <td class="identifier-number">{{ product.identifier_value or '(blank)' }}</td>
+            <td>{{ product.sku or '(blank)' }}</td>
+            <td>{{ product.product_name or '(blank)' }}</td>
+            <td>
+              <label class="asin-entry">
+                <span class="sr-only">ASIN for catalog row {{ product.source_row }}</span>
+                <input
+                  type="text"
+                  name="asin_{{ product.source_row }}"
+                  value="{{ entered_values.get(product.source_row, '') }}"
+                  maxlength="10"
+                  pattern="[A-Za-z0-9]{10}"
+                  placeholder="10-character ASIN"
+                  autocomplete="off"
+                >
+              </label>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="form-actions resolution-actions">
+    <button class="button button-primary" type="submit">Continue Comparison</button>
+    <p class="note">You may leave a field blank. That row will be preserved on the report's ASIN Needed sheet with its identifier number.</p>
+  </div>
+</form>
+{% endblock %}

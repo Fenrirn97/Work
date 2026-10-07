@@ -1,0 +1,2583 @@
+SHIPSTATION EXCEL EXPORT — PYTHON — VERSION 1.2.0
+COMPLETE SOURCE CODE IN ONE TEXT FILE
+
+Each original file is shown between BEGIN FILE and END FILE markers.
+To rebuild the project, copy the text inside each section into the matching filename.
+
+FILES INCLUDED:
+- README.txt
+- START.cmd
+- requirements.txt
+- V1-example.txt
+- V2-example.txt
+- app.py
+- shipstation.py
+- print_history.py
+- excel_export.py
+- public/local/index.html
+- public/app.js
+- public/style.css
+- public/favicon.svg
+- tests/test_export.py
+
+
+===== BEGIN FILE: README.txt =====
+
+SHIPSTATION EXCEL EXPORT — PYTHON — VERSION 1.2.0
+
+WHAT THE PROGRAM DOES
+
+1. Reads the ShipStation API key from the TXT file you choose.
+2. Reads Shipments and Fulfillments for the Ship Date you enter.
+3. Gets each order's item name, SKU, quantity, Order Date, tracking and carrier.
+4. Checks this Windows computer's completed print-job records for matching numbers.
+5. Downloads one Excel workbook. The program never prints a document.
+
+START THE PROGRAM ON WINDOWS
+
+1. Install Python 3.11 or newer if needed:
+   https://www.python.org/downloads/
+2. Extract the entire ZIP. Do not run it from inside the ZIP.
+3. Double-click START.cmd.
+4. The first start installs Requests and openpyxl into the program's .venv folder.
+5. Your browser opens automatically. If it does not, open http://127.0.0.1:8787.
+6. Choose the API TXT file, enter Ship Date as MM/DD/YYYY, and click
+   Create Excel Report.
+7. Click the red Exit Program button when finished. This stops Python completely.
+
+Keep the terminal window open while the program is running. No Node.js is needed.
+
+API KEY TXT FILE
+
+Version 1 is recommended because it can provide fuller original-order details:
+
+API_KEY=your_actual_v1_key
+API_SECRET=your_actual_v1_secret
+
+For Version 2 use:
+
+V2_API_KEY=your_actual_v2_key
+
+You can also put one V2 key by itself on one line. Do not mix V1 and V2 keys.
+Replace the ShipStation API credentials at least every 6 months, update your local
+TXT file, and remove the old key in ShipStation. Never commit the TXT file to GitHub.
+
+TODAY COMPARED WITH AN EARLIER DATE
+
+For today's date, Version 1 reads only orders connected to today's shipment and
+fulfillment records. This is the faster path.
+
+For any earlier date, Version 1 checks every page of orders currently marked
+Shipped. This slower scan is intentional because an order may have been placed on
+an older day and marked shipped later by Amazon, Walmart or another provider.
+The screen shows the current page and recalculates the estimated remaining time.
+
+WHAT IS IN EXCEL
+
+The first sheet is named with the selected date and includes:
+
+- Order Number
+- Item Name
+- SKU
+- Quantity
+- Order Date
+- Ship Date
+- Tracking Number
+- Carrier
+- Unit Price and Line Total
+- Store, recipient and ShipStation IDs
+- Print Status, print time, printer, computer and matched document name
+
+Tracking Records keeps the raw daily shipment and fulfillment matches.
+Print History contains only Windows print jobs matched to a ShipStation identifier.
+Read Me explains missing fields and limitations.
+
+PRINT-HISTORY CHECK
+
+The program never prints. It only reads Windows PrintService Event 307 records.
+Those records must already exist before the report runs.
+
+To enable the Windows log:
+
+1. Open Event Viewer.
+2. Go to Applications and Services Logs > Microsoft > Windows > PrintService.
+3. Right-click Operational and choose Enable Log.
+
+Windows must keep a useful document name for automatic matching. The program looks
+for a tracking number first, then the order number, Shipment ID or Record ID inside
+the print-job document name. A downloaded file that was never sent to a Windows
+printer will not create Event 307.
+
+Print Status meanings:
+
+- Printed - Windows record found: a completed spooler record matched an identifier.
+- No matching print record: the log was available but no useful match was found.
+- Unknown - print log unavailable: Windows logging was disabled or could not be read.
+
+"Printed" means Windows completed the spooler job. It does not prove the paper came
+out correctly. "No matching print record" does not prove it was never printed. The
+job may have used a generic name, occurred before logging was enabled, or been sent
+from another computer.
+
+This version checks only the Windows computer running the program. To cover several
+packing computers, run it where their jobs pass through a shared print server or
+collect each computer's logs into one shared source in a later version.
+
+PRIVACY AND SAFETY
+
+The program runs only at 127.0.0.1 on your computer. It uses read-only ShipStation
+API calls. Credentials and the report stay in memory until the browser downloads
+the Excel file. API secrets are not written to application logs or the workbook.
+The downloaded workbook contains order data, so store it securely.
+
+SOURCE CODE GUIDE
+
+The source uses direct names and numbered sections so it is easier to follow:
+
+- app.py: starts the local website and handles Create Report / Exit Program.
+- shipstation.py: validates input, calls ShipStation and combines the order data.
+- print_history.py: reads Windows print records and matches document names.
+- excel_export.py: creates the four Excel worksheets.
+- public/local/index.html: the page structure.
+- public/app.js: the buttons, progress updates and Excel download.
+- public/style.css: the page colors and layout.
+- tests/test_export.py: synthetic tests; it does not use a real API account.
+
+The code is intentionally plain and avoids a framework or JavaScript build step.
+The API retry, pagination and input checks remain because removing them could create
+an incomplete report or expose an API key.
+
+MANUAL START
+
+Windows:
+
+py -3 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe app.py
+
+Mac or Linux: use python3 -m venv .venv and .venv/bin/python for the last
+two commands. Windows print-history checking is unavailable on Mac and Linux.
+
+TESTS
+
+python -m unittest discover -s tests -v
+
+The 15 tests use synthetic ShipStation and Windows print-history responses. Compare
+the first real export with the ShipStation Shipped screen before relying on it.
+
+OFFICIAL REFERENCES
+
+https://www.shipstation.com/docs/api/orders/list-orders/
+https://www.shipstation.com/docs/api/fulfillments/list-fulfillments/
+https://docs.shipstation.com/apis/openapi/fulfillments/list_fulfillments
+https://learn.microsoft.com/windows/win32/printdocs/printing-and-print-spooler
+https://requests.readthedocs.io/en/latest/user/quickstart/
+https://openpyxl.readthedocs.io/en/stable/tutorial.html
+
+===== END FILE: README.txt =====
+
+
+===== BEGIN FILE: START.cmd =====
+
+@echo off
+setlocal
+cd /d "%~dp0"
+set "PY_CMD=py -3"
+py -3 -c "import sys; assert sys.version_info >= (3, 11)" >nul 2>nul
+if errorlevel 1 (
+  set "PY_CMD=python"
+  python -c "import sys; assert sys.version_info >= (3, 11)" >nul 2>nul
+  if errorlevel 1 (
+    echo Install Python 3.11 or newer from https://www.python.org/downloads/ then reopen START.cmd.
+    pause
+    exit /b 1
+  )
+)
+if not exist ".venv\Scripts\python.exe" (
+  echo Preparing the app for first use...
+  %PY_CMD% -m venv .venv
+  if errorlevel 1 goto setup_error
+)
+".venv\Scripts\python.exe" -c "import importlib.metadata as m; assert m.version('requests') == '2.34.2'; assert m.version('openpyxl') == '3.1.5'" >nul 2>nul
+if errorlevel 1 (
+  echo Installing the Python packages. Internet is needed for this first step.
+  ".venv\Scripts\python.exe" -m pip install -r requirements.txt
+  if errorlevel 1 goto setup_error
+)
+".venv\Scripts\python.exe" app.py
+if errorlevel 1 goto runtime_error
+exit /b 0
+:runtime_error
+echo The app stopped because of an error. Review the message above.
+pause
+exit /b 1
+:setup_error
+echo Setup did not finish. Check your internet connection and folder permissions, then try again.
+pause
+exit /b 1
+
+===== END FILE: START.cmd =====
+
+
+===== BEGIN FILE: requirements.txt =====
+
+requests==2.34.2
+openpyxl==3.1.5
+
+===== END FILE: requirements.txt =====
+
+
+===== BEGIN FILE: V1-example.txt =====
+
+# Recommended for original Order Date. Replace BOTH placeholders.
+API_KEY=REPLACE_WITH_V1_API_KEY
+API_SECRET=REPLACE_WITH_V1_API_SECRET
+
+===== END FILE: V1-example.txt =====
+
+
+===== BEGIN FILE: V2-example.txt =====
+
+# V2 report leaves original Order Date blank. Replace the placeholder.
+V2_API_KEY=REPLACE_WITH_V2_API_KEY
+
+===== END FILE: V2-example.txt =====
+
+
+===== BEGIN FILE: app.py =====
+
+"""Local Python web app. Run with START.cmd or python app.py."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import mimetypes
+import os
+from pathlib import Path
+import threading
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import unquote, urlsplit
+
+from excel_export import build_excel
+from shipstation import ReportError, extract_report, parse_credentials, parse_ship_date
+
+ROOT = Path(__file__).resolve().parent
+BROWSER_SECURITY_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+}
+
+
+""" ----------- 1 - START THE LOCAL WEBSITE ----------- """
+
+
+def make_server(port=8787, root=None, extractor=extract_report):
+    public_folder = Path(root or ROOT / "public").resolve()
+    export_lock = threading.Lock()
+
+    class BrowserRequestHandler(BaseHTTPRequestHandler):
+        # Silence default URL logging and keep credentials/customer data out of logs.
+        def log_message(self, format, *args):
+            pass
+
+        @property
+        def origin(self):
+            return f"http://127.0.0.1:{self.server.server_port}"
+
+        def headers_ok(self):
+            return self.headers.get("Host") == urlsplit(self.origin).netloc
+
+        def reply(self, status, content, content_type="application/json"):
+            if isinstance(content, dict):
+                content = json.dumps(content).encode()
+            self.send_response(status)
+            for key, value in BROWSER_SECURITY_HEADERS.items():
+                self.send_header(key, value)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(content)
+
+        def do_GET(self):
+            if not self.headers_ok():
+                self.reply(403, {"error": "Open the displayed 127.0.0.1 address."})
+                return
+            path = unquote(urlsplit(self.path).path)
+            requested_file = (
+                public_folder / ("local/index.html" if path == "/" else path.lstrip("/"))
+            ).resolve()
+            if not requested_file.is_relative_to(public_folder) or not requested_file.is_file():
+                self.reply(404, {"error": "Not found."})
+                return
+            content_type = {
+                ".js": "text/javascript",
+                ".css": "text/css",
+                ".html": "text/html; charset=utf-8",
+            }.get(requested_file.suffix)
+            self.reply(
+                200,
+                requested_file.read_bytes(),
+                content_type
+                or mimetypes.guess_type(requested_file.name)[0]
+                or "application/octet-stream",
+            )
+
+        do_HEAD = do_GET
+
+        def do_POST(self):
+            if (
+                not self.headers_ok()
+                or self.headers.get("Origin", self.origin) != self.origin
+                or self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none")
+            ):
+                self.reply(403, {"error": "Open this app directly to export."})
+                return
+            request_path = urlsplit(self.path).path
+            if request_path == "/api/exit":
+                self.reply(200, {"stopping": True})
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
+            if request_path != "/api/report":
+                self.reply(404, {"error": "Not found."})
+                return
+            if not self.headers.get("Content-Type", "").startswith("application/json"):
+                self.reply(415, {"error": "Expected a JSON request."})
+                return
+            payload = {}
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 1 <= length <= 24000 or self.headers.get("Transfer-Encoding"):
+                    raise ReportError("Choose a TXT key file smaller than 16 KB.")
+                self.connection.settimeout(30)
+                payload = json.loads(self.rfile.read(length))
+                if not isinstance(payload, dict):
+                    raise ValueError()
+                parse_credentials(payload.get("credentialsText"))
+                parse_ship_date(payload.get("shipDate"))
+            except (ValueError, TypeError, ReportError, OSError) as error:
+                self.reply(
+                    400,
+                    {
+                        "error": (
+                            str(error)
+                            if isinstance(error, ReportError)
+                            else "Choose a valid TXT key file and Ship Date (MM/DD/YYYY)."
+                        )
+                    },
+                )
+                return
+            if not export_lock.acquire(blocking=False):
+                self.reply(409, {"error": "An export is already running. Wait for it to finish."})
+                return
+            try:
+                self.send_response(200)
+                for key, value in BROWSER_SECURITY_HEADERS.items():
+                    self.send_header(key, value)
+                self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                self.send_header("Connection", "close")
+                self.end_headers()
+
+                def send(event):
+                    self.wfile.write(
+                        (json.dumps(event, ensure_ascii=True, allow_nan=False) + "\n").encode()
+                    )
+                    self.wfile.flush()
+
+                def progress(update):
+                    if isinstance(update, dict):
+                        send({"type": "progress", **update})
+                    else:
+                        send({"type": "progress", "message": str(update)})
+
+                try:
+                    report = extractor(
+                        payload["credentialsText"], payload["shipDate"], progress=progress
+                    )
+                    payload["credentialsText"] = ""
+                    send({"type": "progress", "message": "Creating Excel with Python..."})
+                    workbook = build_excel(report)
+                    summary = {
+                        key: report[key]
+                        for key in (
+                            "version",
+                            "shipDate",
+                            "rowCount",
+                            "missingTrackingCount",
+                            "printJobCount",
+                            "printHistoryAvailable",
+                        )
+                    }
+                    summary["fileBase64"] = base64.b64encode(workbook).decode("ascii")
+                    send({"type": "complete", "report": summary})
+                except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                    pass
+                except Exception as error:
+                    try:
+                        send(
+                            {
+                                "type": "error",
+                                "message": (
+                                    str(error)
+                                    if isinstance(error, ReportError)
+                                    else "The export could not be completed. No partial file was created."
+                                ),
+                            }
+                        )
+                    except OSError:
+                        pass
+            finally:
+                payload.clear()
+                export_lock.release()
+                self.close_connection = True
+
+    class LocalServer(ThreadingHTTPServer):
+        daemon_threads = True
+
+        def handle_error(self, request, client_address):
+            # Never dump an exception containing a request or customer record.
+            pass
+
+    return LocalServer(("127.0.0.1", port), BrowserRequestHandler)
+
+
+""" ----------- 2 - OPEN THE PROGRAM IN THE BROWSER ----------- """
+
+
+def main():
+    parser = argparse.ArgumentParser(description="ShipStation Excel Export — Python")
+    parser.add_argument(
+        "--no-browser", action="store_true", help="Do not open the browser automatically"
+    )
+    parser.add_argument(
+        "--port", type=int, default=int(os.environ.get("SHIPSTATION_EXPORT_PORT", "8787"))
+    )
+    args = parser.parse_args()
+    try:
+        server = make_server(args.port)
+    except OSError:
+        print(
+            "Cannot start the app. Close any older copy using port 8787, or choose another port with --port."
+        )
+        return 1
+    origin = f"http://127.0.0.1:{server.server_port}"
+    print(
+        f"\nShipStation Excel Export — Python\nOpen {origin}\nKeep this window open. Press Ctrl+C to stop.\n"
+    )
+    if not args.no_browser:
+        timer = threading.Timer(0.5, lambda: webbrowser.open(origin))
+        timer.daemon = True
+        timer.start()
+    try:
+        server.serve_forever(poll_interval=0.1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+===== END FILE: app.py =====
+
+
+===== BEGIN FILE: shipstation.py =====
+
+"""Read-only ShipStation extraction. Credentials and records are not persisted."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import math
+import re
+import time
+from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote
+
+import requests
+
+from print_history import add_print_history, read_windows_print_history
+
+
+class ReportError(Exception):
+    def __init__(self, message, code="REPORT_ERROR"):
+        super().__init__(message)
+        self.code = code
+
+
+""" ----------- 1 - CHECK USER INPUT ----------- """
+
+
+def parse_credentials(text):
+    if not isinstance(text, str) or len(text.encode("utf-8")) > 16384:
+        raise ReportError("Choose a TXT file smaller than 16 KB.")
+    lines = [
+        s.strip()
+        for s in text.lstrip("\ufeff").splitlines()
+        if s.strip() and not s.strip().startswith("#")
+    ]
+    aliases = {
+        "key": ("API_KEY", "V1_API_KEY", "SHIPSTATION_API_KEY"),
+        "secret": ("API_SECRET", "V1_API_SECRET", "SHIPSTATION_API_SECRET"),
+        "v2": ("V2_API_KEY", "SHIPSTATION_V2_API_KEY"),
+    }
+    allowed = {name for names in aliases.values() for name in names}
+    fields = {}
+    for line in lines:
+        match = re.fullmatch(r"([a-zA-Z][a-zA-Z0-9_ -]*)\s*[:=]\s*(.+)", line)
+        if not match:
+            continue
+        name = re.sub(r"[ -]", "_", match[1].strip().upper())
+        if name not in allowed:
+            continue
+        if name in fields:
+            raise ReportError("The TXT file repeats a credential field.")
+        fields[name] = match[2].strip().strip("\"'")
+    values = {}
+    for group, names in aliases.items():
+        found = [fields[name] for name in names if name in fields]
+        if len(found) > 1:
+            raise ReportError("Keep only one key and its matching secret in the file.")
+        values[group] = found[0] if found else ""
+    key, secret, v2 = (values[k] for k in ("key", "secret", "v2"))
+    if v2 and (key or secret):
+        raise ReportError("Use V1 key + secret OR one V2 key, not both.")
+    if secret and not key or "V1_API_KEY" in fields and not secret:
+        raise ReportError("V1 requires both API_KEY and API_SECRET.")
+    value = v2 or key or (lines[0] if len(lines) == 1 and not fields else "")
+    if not value:
+        raise ReportError(
+            "No API key found. Use one V2 key, or API_KEY and API_SECRET on separate lines."
+        )
+    for part in (value, secret):
+        if part and (
+            not re.fullmatch(r"[\x21-\x7e]{8,512}", part)
+            or re.search(r"YOUR_|PASTE_|REPLACE_|HERE", part, re.I)
+        ):
+            raise ReportError(
+                "Replace the example text with real credentials. Keys cannot contain spaces."
+            )
+    return {"version": "v1" if secret else "v2", "key": value, "secret": secret}
+
+
+def parse_ship_date(value):
+    value = str(value).strip()
+    if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", value):
+        raise ReportError("Enter Ship Date as MM/DD/YYYY, for example 08/27/2026.")
+    try:
+        result = datetime.strptime(value, "%m/%d/%Y").date()
+        if not 2000 <= result.year <= 2099:
+            raise ValueError()
+    except ValueError:
+        raise ReportError("Enter a real calendar date between 2000 and 2099.") from None
+    return {
+        "display": value,
+        "iso": result.isoformat(),
+        "next": (result + timedelta(days=1)).isoformat(),
+    }
+
+
+def calendar_date(value):
+    if isinstance(value, str) and re.match(r"^\d{4}-\d{2}-\d{2}", value):
+        try:
+            return date.fromisoformat(value[:10]).isoformat()
+        except ValueError:
+            pass
+    return ""
+
+
+def as_id(value):
+    return "" if value is None else str(value)
+
+
+def number_or_none(value):
+    if value is None or value == "" or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+        return number if math.isfinite(number) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def joined(values):
+    return "; ".join(dict.fromkeys(str(v) for v in values if v is not None and v != ""))
+
+
+""" ----------- 2 - CONNECT TO SHIPSTATION ----------- """
+
+
+class ShipStationAPI:
+    def __init__(
+        self,
+        credentials,
+        progress=lambda message: None,
+        session=None,
+        interval=None,
+        sleep=time.sleep,
+    ):
+        self.version = credentials["version"]
+        self.base = (
+            "https://ssapi.shipstation.com"
+            if self.version == "v1"
+            else "https://api.shipstation.com/v2"
+        )
+        self.headers = {"Accept": "application/json"}
+        if self.version == "v1":
+            pair = (credentials["key"] + ":" + credentials["secret"]).encode("ascii")
+            self.headers["Authorization"] = "Basic " + base64.b64encode(pair).decode("ascii")
+        else:
+            self.headers["api-key"] = credentials["key"]
+        self.session = session if session is not None else requests.Session()
+        self.interval = (
+            interval if interval is not None else (1.6 if self.version == "v1" else 0.35)
+        )
+        self.progress, self.sleep, self.next_allowed = progress, sleep, 0
+
+    def get(self, path, **params):
+        if not re.fullmatch(r"/(orders|shipments|fulfillments|labels|stores)(/[^/?#]+)?", path):
+            raise ReportError("Unsupported API resource.")
+        for attempt in range(4):
+            if self.next_allowed > time.monotonic():
+                self.sleep(self.next_allowed - time.monotonic())
+            try:
+                # Explicit auth prevents an unrelated .netrc login overriding the uploaded key.
+                response = self.session.get(
+                    self.base + path,
+                    params=params,
+                    headers=self.headers,
+                    timeout=(10, 45),
+                    allow_redirects=False,
+                    auth=lambda request: request,
+                )
+            except requests.RequestException:
+                if attempt == 3:
+                    raise ReportError(
+                        "Cannot reach ShipStation. Check your internet connection and try again.",
+                        "NETWORK",
+                    ) from None
+                self.sleep(2**attempt)
+                continue
+            finally:
+                self.next_allowed = time.monotonic() + self.interval
+            status = response.status_code
+            if status == 401:
+                raise ReportError(
+                    "ShipStation rejected the credentials. Check API version, key and V1 secret.",
+                    "AUTH",
+                )
+            if status in (402, 403):
+                raise ReportError(
+                    "Your ShipStation account or key cannot access this API. Check plan and permissions.",
+                    "ACCESS",
+                )
+            if status == 429 or status >= 500:
+                if attempt == 3:
+                    raise ReportError(
+                        "ShipStation is busy or rate-limiting requests. Retry later; no partial file was created.",
+                        "RETRY_LIMIT",
+                    )
+                retry = response.headers.get("Retry-After") or response.headers.get(
+                    "X-Rate-Limit-Reset"
+                )
+                try:
+                    seconds = float(retry) if retry is not None else 2**attempt
+                except ValueError:
+                    try:
+                        seconds = max(0, parsedate_to_datetime(retry).timestamp() - time.time())
+                    except (ValueError, TypeError, OverflowError):
+                        seconds = 2**attempt
+                if not math.isfinite(seconds):
+                    seconds = 2**attempt
+                if seconds > 300:
+                    raise ReportError(
+                        "ShipStation requested a long pause. Please retry in a few minutes.",
+                        "RATE_LIMIT",
+                    )
+                self.progress("ShipStation requested a pause; retrying safely...")
+                self.sleep(max(1, seconds + 0.2))
+                continue
+            if not 200 <= status < 300:
+                raise ReportError(
+                    f"ShipStation returned HTTP {status} for {path.split('/')[1]}. No partial file was created.",
+                    f"HTTP_{status}",
+                )
+            try:
+                data = response.json()
+            except ValueError:
+                raise ReportError(
+                    "ShipStation returned an unexpected response instead of JSON.", "BAD_RESPONSE"
+                ) from None
+            if response.headers.get("X-Rate-Limit-Remaining") == "0":
+                reset = number_or_none(response.headers.get("X-Rate-Limit-Reset")) or 60
+                if reset > 300:
+                    raise ReportError(
+                        "ShipStation requested a long pause. Please retry later.", "RATE_LIMIT"
+                    )
+                self.next_allowed = time.monotonic() + max(0, reset)
+            return data
+        raise ReportError("ShipStation requests could not be completed.")
+
+    def get_pages(self, path, key, **params):
+        size = 500 if self.version == "v1" else 100
+        size_key = "pageSize" if self.version == "v1" else "page_size"
+        seen, received = set(), 0
+        section_started = time.monotonic()
+        for page in range(1, 1001):
+            self.progress(f"Reading {key}: page {page}...")
+            result = self.get(path, **params, page=page, **{size_key: size})
+            rows = result.get(key) if isinstance(result, dict) else None
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ReportError(
+                    f"ShipStation did not return the expected {key} list.", "BAD_RESPONSE"
+                )
+            pages, total = number_or_none(result.get("pages")), number_or_none(result.get("total"))
+            if not rows:
+                if total is not None and total > received or pages is not None and pages > page:
+                    raise ReportError(
+                        "An API page is missing. Please rerun; no partial file was created.",
+                        "PAGINATION",
+                    )
+                return
+            total_pages = (
+                int(pages)
+                if pages is not None and pages > 0
+                else (max(1, math.ceil(total / size)) if total is not None and total > 0 else None)
+            )
+            if total_pages:
+                average = max(self.interval + 0.25, (time.monotonic() - section_started) / page)
+                self.progress(
+                    {
+                        "message": f"Reading {key}: page {page} of {total_pages}...",
+                        "section": key.replace("_", " ").title(),
+                        "currentPage": page,
+                        "totalPages": total_pages,
+                        "estimatedSeconds": math.ceil(max(0, total_pages - page) * average),
+                    }
+                )
+            signature = hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).digest()
+            if signature in seen:
+                raise ReportError(
+                    "ShipStation repeated a page. Stopping to avoid incomplete or duplicate data.",
+                    "PAGINATION",
+                )
+            seen.add(signature)
+            received += len(rows)
+            yield rows
+            if pages is not None and pages > 0:
+                if page >= pages:
+                    return
+            elif total is not None:
+                if received >= total:
+                    return
+            elif len(rows) < size:
+                return
+        raise ReportError(
+            "The 1,000-page safety limit was reached. No partial file was created.", "PAGINATION"
+        )
+
+
+""" ----------- 3 - CREATE THE EXCEL ROWS ----------- """
+
+
+def make_tracking_record(record, source, version):
+    v1 = version == "v1"
+    return {
+        "recordId": as_id(
+            record.get("fulfillmentId", record.get("shipmentId"))
+            if v1
+            else record.get("fulfillment_id", record.get("label_id"))
+        ),
+        "shipmentId": as_id(record.get("shipmentId") if v1 else record.get("shipment_id")),
+        "orderId": as_id(record.get("orderId") if v1 else record.get("external_order_id")),
+        "orderNumber": as_id(
+            record.get("orderNumber")
+            if v1
+            else record.get("shipment_number") or record.get("external_order_id")
+        ),
+        "shipDate": calendar_date(record.get("shipDate") if v1 else record.get("ship_date")),
+        "tracking": joined(
+            [record.get("trackingNumber") if v1 else record.get("tracking_number")]
+            + [
+                p.get("tracking_number") or p.get("trackingNumber")
+                for p in record.get("packages") or []
+            ]
+        ),
+        "carrier": (
+            record.get("carrierCode")
+            if v1
+            else record.get("fulfillment_carrier_friendly_name")
+            or record.get("carrier_code")
+            or record.get("carrier_id")
+        )
+        or "",
+        "service": (
+            record.get("serviceCode") or record.get("fulfillmentServiceCode")
+            if v1
+            else record.get("fulfillment_service_code") or record.get("service_code")
+        )
+        or "",
+        "provider": (
+            record.get("sellerFillProviderName") or record.get("fulfillmentProviderCode")
+            if v1
+            else record.get("fulfillment_provider_friendly_name")
+            or record.get("fulfillment_provider_code")
+        )
+        or "",
+        "recipient": (record.get("shipTo" if v1 else "ship_to") or {}).get("name", ""),
+        "source": source,
+    }
+
+
+def make_item_row(
+    order_number, order_id, order_date, item, store, recipient, events, quantity_basis, warnings=()
+):
+    item = item or {}
+    quantity, price = number_or_none(item.get("quantity")), number_or_none(
+        item.get("unitPrice", item.get("unit_price"))
+    )
+    row = {
+        "orderNumber": as_id(order_number),
+        "orderId": as_id(order_id),
+        "orderDate": order_date,
+        "itemId": as_id(
+            item.get(
+                "orderItemId", item.get("sales_order_item_id", item.get("external_order_item_id"))
+            )
+        ),
+        "itemName": item.get("name") or "",
+        "sku": item.get("sku") or "",
+        "quantity": quantity,
+        "unitPrice": price,
+        "lineTotal": quantity * price if quantity is not None and price is not None else None,
+        "quantityBasis": quantity_basis,
+        "store": store or "",
+        "recipient": recipient or "",
+        "shipDate": events[0].get("shipDate", ""),
+    }
+    for field, event_field in {
+        "tracking": "tracking",
+        "carrier": "carrier",
+        "service": "service",
+        "fulfillmentProvider": "provider",
+        "shipmentIds": "shipmentId",
+        "recordIds": "recordId",
+        "source": "source",
+    }.items():
+        row[field] = joined(e.get(event_field) for e in events)
+    notes = list(warnings)
+    for key, label in (
+        ("tracking", "Tracking"),
+        ("sku", "SKU"),
+        ("itemName", "Item name"),
+        ("orderDate", "Order date"),
+    ):
+        if not row[key]:
+            notes.append(label + " unavailable")
+    if quantity is None:
+        notes.append("Quantity unavailable")
+    row["warnings"] = joined(notes)
+    return row
+
+
+""" ----------- 4 - GET A VERSION 1 REPORT ----------- """
+
+
+def get_v1_report(shipstation_api, day):
+    events, rows, issues, by_order, seen = [], [], [], {}, set()
+    params = {"shipDateStart": day["iso"] + " 00:00:00", "shipDateEnd": day["next"] + " 00:00:00"}
+    for key, source in (
+        ("fulfillments", "Fulfillment / marked shipped"),
+        ("shipments", "ShipStation label"),
+    ):
+        extra = {"includeShipmentItems": "true"} if key == "shipments" else {}
+        for page in shipstation_api.get_pages("/" + key, key, **params, **extra):
+            for record in page:
+                if (
+                    record.get("voided")
+                    or record.get("voidDate")
+                    or record.get("isReturnLabel")
+                    or calendar_date(record.get("shipDate")) != day["iso"]
+                ):
+                    continue
+                event = make_tracking_record(record, source, "v1")
+                identity = source, event["recordId"]
+                if event["recordId"] and identity in seen:
+                    continue
+                seen.add(identity)
+                events.append(event)
+                if event["orderId"]:
+                    by_order.setdefault(event["orderId"], []).append(event)
+    stores = {}
+    try:
+        result = shipstation_api.get("/stores")
+        if isinstance(result, list):
+            stores = {as_id(s.get("storeId")): s.get("storeName") for s in result}
+    except ReportError as error:
+        if error.code in ("AUTH", "ACCESS"):
+            raise
+        issues.append("Store names unavailable; Store ID is preserved instead.")
+    found = set()
+
+    def add_order(order, matched, notes=()):
+        identity = as_id(order.get("orderId"))
+        if identity and identity in found:
+            return
+        if identity:
+            found.add(identity)
+        notes = list(notes)
+        if not matched:
+            notes.append("No matching daily shipment/fulfillment record")
+        if not identity:
+            notes.append("Order ID unavailable; tracking cannot be matched safely")
+        if len(matched) > 1:
+            notes.append(
+                "Multiple shipment records: tracking is order-level, not item-to-package allocation"
+            )
+        selected = matched or [{"shipDate": day["iso"], "source": "Shipped order only"}]
+        items = [i for i in order.get("items") or [] if not i.get("adjustment")]
+        store_id = as_id((order.get("advancedOptions") or {}).get("storeId"))
+        for item in items or [None]:
+            rows.append(
+                make_item_row(
+                    order.get("orderNumber"),
+                    identity,
+                    calendar_date(order.get("orderDate")),
+                    item,
+                    stores.get(store_id) or store_id,
+                    (order.get("shipTo") or {}).get("name"),
+                    selected,
+                    "Order item quantity",
+                    notes,
+                )
+            )
+
+    is_today = day["iso"] == date.today().isoformat()
+    if is_today:
+        order_ids = sorted(by_order)
+        shipstation_api.progress(
+            f"Today's date selected: reading only {len(order_ids)} linked order(s)..."
+        )
+        details_started = time.monotonic()
+        for index, identity in enumerate(order_ids, 1):
+            matched = by_order[identity]
+            try:
+                order = shipstation_api.get("/orders/" + quote(identity, safe=""))
+                if not isinstance(order, dict):
+                    raise ReportError("Unexpected order detail response.", "BAD_RESPONSE")
+                status = order.get("orderStatus")
+                notes = (
+                    []
+                    if status == "shipped"
+                    else [
+                        f"Current order status is {status or 'unavailable'}; daily shipment retained"
+                    ]
+                )
+                add_order(order, matched, notes)
+            except ReportError as error:
+                if error.code != "HTTP_404":
+                    raise
+                found.add(identity)
+                first = matched[0]
+                rows.append(
+                    make_item_row(
+                        first["orderNumber"],
+                        identity,
+                        "",
+                        None,
+                        "",
+                        first["recipient"],                        matched,
+                        "Order item quantity",
+                        ["Order detail not found; tracking record retained"],
+                    )
+                )
+            average = max(
+                shipstation_api.interval + 0.25, (time.monotonic() - details_started) / index
+            )
+            shipstation_api.progress(
+                {
+                    "message": f"Reading today's order details: order {index} of {len(order_ids)}...",
+                    "section": "Today's order details",
+                    "currentPage": index,
+                    "totalPages": len(order_ids),
+                    "estimatedSeconds": math.ceil(max(0, len(order_ids) - index) * average),
+                }
+            )
+    else:
+        shipstation_api.progress(
+            "Earlier date selected: checking all Shipped orders, including orders placed on earlier dates..."
+        )
+        for page in shipstation_api.get_pages("/orders", "orders", orderStatus="shipped"):
+            for order in page:
+                identity = as_id(order.get("orderId"))
+                if identity in found or order.get("orderStatus") != "shipped":
+                    continue
+                matched = by_order.get(identity, []) if identity else []
+                if not matched and calendar_date(order.get("shipDate")) != day["iso"]:
+                    continue
+                add_order(order, matched)
+    for event in events:
+        if event["orderId"] not in found:
+            issues.append(
+                f"Daily record {event['recordId'] or '(no ID)'} is not linked to a currently Shipped order. Retained on Tracking Records."
+            )
+    strategy = (
+        "Today's linked orders + Shipments + Fulfillments"
+        if is_today
+        else "Full Shipped Orders history + Shipments + Fulfillments"
+    )
+    return {
+        "rows": rows,
+        "events": events,
+        "issues": issues,
+        "coverage": strategy,
+        "quantityNote": "Quantity is ORDER LINE quantity, not proof all units shipped that day. Split orders may span dates. Tracking is linked at order level; package allocation is not inferred.",
+    }
+
+
+""" ----------- 5 - GET A VERSION 2 REPORT ----------- """
+
+
+def get_v2_report(shipstation_api, day):
+    events, rows = [], []
+    for page in shipstation_api.get_pages(
+        "/fulfillments",
+        "fulfillments",
+        ship_date_start=day["iso"] + "T00:00:00Z",
+        ship_date_end=day["next"] + "T00:00:00Z",
+    ):
+        for record in page:
+            if (
+                not record.get("voided")
+                and not record.get("voided_at")
+                and calendar_date(record.get("ship_date")) == day["iso"]
+            ):
+                events.append(make_tracking_record(record, "Fulfillment / marked shipped", "v2"))
+    # V2 labels do not have a ship-date filter. Do not restrict label creation date.
+    shipstation_api.progress("Checking completed labels by Ship Date, not label creation date...")
+    for page in shipstation_api.get_pages("/labels", "labels", label_status="completed"):
+        for record in page:
+            if (
+                not record.get("voided")
+                and not record.get("voided_at")
+                and not record.get("is_return_label")
+                and record.get("status", "completed") == "completed"
+                and calendar_date(record.get("ship_date")) == day["iso"]
+            ):
+                events.append(make_tracking_record(record, "ShipStation label", "v2"))
+    events = list({(e["source"], e["recordId"] or i): e for i, e in enumerate(events)}.values())
+    groups = {}
+    for i, event in enumerate(events):
+        groups.setdefault(event["shipmentId"] or f"unmatched:{i}", []).append(event)
+    details_started = time.monotonic()
+    for index, (identity, group) in enumerate(groups.items(), 1):
+        shipstation_api.progress(f"Reading item details: shipment {index} of {len(groups)}...")
+        shipment, notes = {}, []
+        if identity.startswith("unmatched:"):
+            notes.append("Shipment ID unavailable; record preserved")
+        else:
+            try:
+                shipment = shipstation_api.get("/shipments/" + quote(identity, safe=""))
+                if not isinstance(shipment, dict):
+                    raise ReportError("Unexpected shipment detail response.", "BAD_RESPONSE")
+            except ReportError as error:
+                if error.code != "HTTP_404":
+                    raise
+                notes.append("Shipment detail not found; record preserved")
+        average = max(shipstation_api.interval + 0.25, (time.monotonic() - details_started) / index)
+        shipstation_api.progress(
+            {
+                "message": f"Reading item details: shipment {index} of {len(groups)}...",
+                "section": "Shipment details",
+                "currentPage": index,
+                "totalPages": len(groups),
+                "estimatedSeconds": math.ceil(max(0, len(groups) - index) * average),
+            }
+        )
+        if len(group) > 1:
+            notes.append("Multiple tracking records; item-to-package allocation is not inferred")
+        for item in shipment.get("items") or [{}]:
+            rows.append(
+                make_item_row(
+                    item.get("external_order_id")
+                    or shipment.get("shipment_number")
+                    or group[0]["orderNumber"],
+                    item.get("sales_order_id")
+                    or shipment.get("external_order_id")
+                    or group[0]["orderId"],
+                    "",
+                    item,
+                    shipment.get("order_source_code"),
+                    (shipment.get("ship_to") or {}).get("name") or group[0]["recipient"],
+                    group,
+                    "Shipment item quantity",
+                    notes,
+                )
+            )
+    return {
+        "rows": rows,
+        "events": events,
+        "issues": [
+            "V2 does not provide the original Order Date here or exact Shipped-status order reconciliation. Use a V1 key + secret for the fuller order-based report."
+        ],
+        "coverage": "V2 Fulfillments + completed Labels + Shipment items (limited order metadata)",
+        "quantityNote": "Quantity is SHIPMENT ITEM quantity. Labels for the same shipment are grouped so items are not multiplied by package count. Order Date is blank; shipment creation date is not substituted.",
+    }
+
+
+""" ----------- 6 - RUN THE COMPLETE REPORT ----------- """
+
+
+def extract_report(
+    credentials_text,
+    ship_date,
+    progress=lambda message: None,
+    print_history_reader=read_windows_print_history,
+    **client_options,
+):
+    credentials, day = parse_credentials(credentials_text), parse_ship_date(ship_date)
+    shipstation_api = ShipStationAPI(credentials, progress, **client_options)
+    try:
+        progress(
+            "Credentials recognized as "
+            + credentials["version"].upper()
+            + ". Starting read-only export..."
+        )
+        if credentials["version"] == "v1":
+            report = get_v1_report(shipstation_api, day)
+        else:
+            report = get_v2_report(shipstation_api, day)
+    finally:
+        shipstation_api.session.close()
+        shipstation_api.headers.clear()
+        credentials.clear()
+    version = shipstation_api.version
+    report["rows"].sort(key=lambda r: (r["orderNumber"], r["sku"]))
+
+    def group_key(row):
+        return (
+            row["orderId"]
+            if version == "v1" and row["orderId"]
+            else row["shipmentIds"] or row["recordIds"] or row["orderNumber"]
+        )
+
+    progress("Checking Windows print history on this computer...")
+    print_history = print_history_reader(day["iso"])
+    matched_print_jobs = add_print_history(report["rows"], print_history)
+
+    report.update(
+        version=version,
+        shipDate=day["iso"],
+        displayDate=day["display"],
+        generatedAt=datetime.now(timezone.utc).isoformat(),
+        rowCount=len(report["rows"]),
+        recordCount=len({group_key(row) for row in report["rows"]}),
+        missingTrackingCount=len({group_key(row) for row in report["rows"] if not row["tracking"]}),
+        printJobs=matched_print_jobs,
+        printJobCount=len(matched_print_jobs),
+        printHistoryAvailable=bool(print_history.get("available")),
+        printHistoryNote=print_history.get("note") or "Print history was not checked.",
+    )
+    return report
+
+===== END FILE: shipstation.py =====
+
+
+===== BEGIN FILE: print_history.py =====
+
+"""Read Windows print records. This module never sends anything to a printer."""
+
+import json
+import os
+import re
+import subprocess
+from datetime import date
+
+""" ----------- 1 - READ WINDOWS PRINT HISTORY ----------- """
+
+
+def read_windows_print_history(ship_date):
+    """Return completed print jobs from the computer running this program."""
+
+    if os.name != "nt":
+        return {
+            "available": False,
+            "jobs": [],
+            "note": "Windows print history is only available when the program runs on Windows.",
+        }
+
+    selected_date = date.fromisoformat(ship_date)
+
+    # Event 307 means that the Windows print spooler completed a print job.
+    powershell_code = f"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+$logName = 'Microsoft-Windows-PrintService/Operational'
+$logInformation = Get-WinEvent -ListLog $logName
+
+if (-not $logInformation.IsEnabled) {{
+    @{{
+        available = $false
+        note = 'Windows PrintService Operational logging is disabled.'
+        jobs = @()
+    }} | ConvertTo-Json -Compress -Depth 4
+    exit
+}}
+
+$startDate = [datetime]::new({selected_date.year}, {selected_date.month}, {selected_date.day}, 0, 0, 0)
+$endDate = $startDate.AddDays(1)
+
+$events = @(Get-WinEvent -FilterHashtable @{{
+    LogName = $logName
+    Id = 307
+    StartTime = $startDate
+    EndTime = $endDate
+}} -ErrorAction SilentlyContinue)
+
+$printJobs = @($events | ForEach-Object {{
+    $details = $_.Properties
+
+    [PSCustomObject]@{{
+        recordId = $_.RecordId
+        printedAt = $_.TimeCreated.ToString('o')
+        documentName = if ($details.Count -gt 1) {{ [string]$details[1].Value }} else {{ '' }}
+        userName = if ($details.Count -gt 2) {{ [string]$details[2].Value }} else {{ '' }}
+        computerName = if ($details.Count -gt 3) {{ [string]$details[3].Value }} else {{ $_.MachineName }}
+        printerName = if ($details.Count -gt 4) {{ [string]$details[4].Value }} else {{ '' }}
+        pages = if ($details.Count -gt 7) {{ $details[7].Value }} else {{ $null }}
+    }}
+}})
+
+@{{
+    available = $true
+    note = 'Windows PrintService Event 307 records were checked on this computer.'
+    jobs = $printJobs
+}} | ConvertTo-Json -Compress -Depth 4
+"""
+
+    try:
+        completed_process = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", powershell_code],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {
+            "available": False,
+            "jobs": [],
+            "note": "The program could not read Windows print history.",
+        }
+
+    if completed_process.returncode != 0 or not completed_process.stdout.strip():
+        return {
+            "available": False,
+            "jobs": [],
+            "note": "Windows did not return its print history.",
+        }
+
+    try:
+        print_history = json.loads(completed_process.stdout.lstrip("\ufeff").strip())
+    except json.JSONDecodeError:
+        return {
+            "available": False,
+            "jobs": [],
+            "note": "Windows returned print history in an unexpected format.",
+        }
+
+    if not isinstance(print_history, dict):
+        return {
+            "available": False,
+            "jobs": [],
+            "note": "Windows returned print history in an unexpected format.",
+        }
+
+    print_history["jobs"] = print_history.get("jobs") or []
+    return print_history
+
+
+""" ----------- 2 - MATCH PRINT JOBS TO SHIPSTATION ----------- """
+
+
+def clean_text(value):
+    """Remove spaces and punctuation so tracking numbers are easier to compare."""
+
+    return re.sub(r"[^a-zA-Z0-9]", "", str(value or "")).lower()
+
+
+def get_row_identifiers(order_row):
+    """Return the useful numbers that may appear in a print-job name."""
+
+    identifiers = []
+
+    fields = [
+        ("Tracking number", order_row.get("tracking")),
+        ("Order number", order_row.get("orderNumber")),
+        ("Shipment ID", order_row.get("shipmentIds")),
+        ("Record ID", order_row.get("recordIds")),
+    ]
+
+    for identifier_type, field_value in fields:
+        for value in str(field_value or "").split(";"):
+            cleaned_value = clean_text(value)
+
+            # Short values create too many accidental matches.
+            if len(cleaned_value) >= 6:
+                identifiers.append((identifier_type, cleaned_value))
+
+    return identifiers
+
+
+def add_print_history(order_rows, print_history):
+    """Add print information to each row and return only matched print jobs."""
+
+    print_log_available = bool(print_history.get("available"))
+    print_jobs = print_history.get("jobs") or []
+    matched_print_jobs = {}
+
+    for order_row in order_rows:
+        order_row["printStatus"] = "Unknown - print log unavailable"
+        order_row["printedAt"] = ""
+        order_row["printerName"] = ""
+        order_row["printComputer"] = ""
+        order_row["printDocument"] = ""
+        order_row["printMatch"] = ""
+        order_row["printCount"] = 0
+
+        if not print_log_available:
+            continue
+
+        matching_jobs = []
+        match_type = ""
+
+        for identifier_type, identifier in get_row_identifiers(order_row):
+            for print_job in print_jobs:
+                document_name = clean_text(print_job.get("documentName"))
+
+                if identifier in document_name:
+                    matching_jobs.append(print_job)
+                    match_type = identifier_type
+
+            if matching_jobs:
+                break
+
+        if not matching_jobs:
+            order_row["printStatus"] = "No matching print record"
+            continue
+
+        matching_jobs.sort(key=lambda job: job.get("printedAt") or "")
+        first_print_job = matching_jobs[0]
+
+        order_row["printStatus"] = "Printed - Windows record found"
+        order_row["printedAt"] = first_print_job.get("printedAt") or ""
+        order_row["printerName"] = first_print_job.get("printerName") or ""
+        order_row["printComputer"] = first_print_job.get("computerName") or ""
+        order_row["printDocument"] = first_print_job.get("documentName") or ""
+        order_row["printMatch"] = match_type
+        order_row["printCount"] = len(matching_jobs)
+
+        for print_job in matching_jobs:
+            job_key = (
+                str(print_job.get("recordId") or ""),
+                str(print_job.get("printedAt") or ""),
+                str(print_job.get("documentName") or ""),
+            )
+
+            if job_key not in matched_print_jobs:
+                matched_print_jobs[job_key] = {
+                    **print_job,
+                    "matchedOrderNumbers": [],
+                    "matchTypes": [],
+                }
+
+            saved_job = matched_print_jobs[job_key]
+            order_number = order_row.get("orderNumber") or ""
+
+            if order_number and order_number not in saved_job["matchedOrderNumbers"]:
+                saved_job["matchedOrderNumbers"].append(order_number)
+
+            if match_type and match_type not in saved_job["matchTypes"]:
+                saved_job["matchTypes"].append(match_type)
+
+    final_jobs = []
+
+    for print_job in matched_print_jobs.values():
+        print_job["matchedOrderNumbers"] = "; ".join(print_job["matchedOrderNumbers"])
+        print_job["matchTypes"] = "; ".join(print_job["matchTypes"])
+        final_jobs.append(print_job)
+
+    final_jobs.sort(key=lambda job: job.get("printedAt") or "")
+    return final_jobs
+
+===== END FILE: print_history.py =====
+
+
+===== BEGIN FILE: excel_export.py =====
+
+"""Create Excel in memory with Python; no customer report is written by the server."""
+
+from datetime import date, datetime
+from io import BytesIO
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+
+from shipstation import ReportError
+
+ITEM_COLUMNS = [
+    ("Order Number", "orderNumber", 25),
+    ("Item Name", "itemName", 45),
+    ("SKU", "sku", 36),
+    ("Quantity", "quantity", 12),
+    ("Order Date", "orderDate", 15),
+    ("Ship Date", "shipDate", 15),
+    ("Tracking Number(s)", "tracking", 34),
+    ("Carrier", "carrier", 21),
+    ("Unit Price", "unitPrice", 14),
+    ("Line Total", "lineTotal", 15),
+    ("Quantity Basis", "quantityBasis", 26),
+    ("Store / Source Code", "store", 24),
+    ("Recipient", "recipient", 27),
+    ("Service", "service", 23),
+    ("Fulfillment Provider", "fulfillmentProvider", 26),
+    ("Order ID", "orderId", 24),
+    ("Item ID", "itemId", 24),
+    ("Shipment IDs", "shipmentIds", 28),
+    ("Record IDs", "recordIds", 28),
+    ("Record Source", "source", 35),
+    ("Review Notes", "warnings", 64),
+    ("Print Status", "printStatus", 34),
+    ("Printed Date / Time", "printedAt", 23),
+    ("Printer", "printerName", 28),
+    ("Print Computer", "printComputer", 28),
+    ("Printed Document", "printDocument", 45),
+    ("Print Match", "printMatch", 20),
+    ("Print Count", "printCount", 12),
+]
+TRACKING_COLUMNS = [
+    ("Order Number / Shipment Reference", "orderNumber", 32),
+    ("Order ID / External Order ID", "orderId", 28),
+    ("Ship Date", "shipDate", 15),
+    ("Tracking Number(s)", "tracking", 34),
+    ("Carrier", "carrier", 23),
+    ("Shipment ID", "shipmentId", 28),
+    ("Record ID", "recordId", 28),
+    ("Record Source", "source", 35),
+    ("Service", "service", 24),
+    ("Fulfillment Provider", "provider", 26),
+    ("Recipient", "recipient", 26),
+]
+PRINT_COLUMNS = [
+    ("Matched Order Number(s)", "matchedOrderNumbers", 30),
+    ("Match Type", "matchTypes", 18),
+    ("Printed Date / Time", "printedAt", 23),
+    ("Document Name", "documentName", 52),
+    ("Printer", "printerName", 28),
+    ("Computer", "computerName", 28),
+    ("Windows User", "userName", 24),
+    ("Pages", "pages", 10),
+    ("Windows Event Record ID", "recordId", 24),
+]
+
+
+""" ----------- 1 - CREATE A FORMATTED EXCEL TABLE ----------- """
+
+
+def table(sheet, columns, records):
+    if len(records) > 1048575:
+        raise ReportError("This report exceeds Excel's row limit. No partial workbook was created.")
+    sheet.append([header for header, _, _ in columns])
+    for index, (_, _, width) in enumerate(columns, 1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+    for row_index, record in enumerate(records, 2):
+        for column_index, (_, key, _) in enumerate(columns, 1):
+            value = record.get(key)
+            if key in ("orderDate", "shipDate"):
+                value = date.fromisoformat(value) if value else None
+            elif key == "printedAt" and value:
+                value = datetime.fromisoformat(value).replace(tzinfo=None)
+            if isinstance(value, str) and len(value) > 32767:
+                raise ReportError(
+                    "A field exceeds Excel's text limit. No truncated workbook was created."
+                )
+            cell = sheet.cell(row_index, column_index, value)
+            if isinstance(value, str):
+                # API text stays text, even when it starts with =, +, -, @ or #.
+                cell.data_type = "s"
+                cell.number_format = "@"
+            elif key in ("orderDate", "shipDate"):
+                cell.number_format = "mm/dd/yyyy"
+            elif key == "printedAt":
+                cell.number_format = "mm/dd/yyyy h:mm AM/PM"
+            elif key in ("unitPrice", "lineTotal"):
+                cell.number_format = "#,##0.00"
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            if key == "warnings" and value:
+                cell.fill = PatternFill("solid", fgColor="FFF1CE")
+        sheet.row_dimensions[row_index].height = 40
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    sheet.row_dimensions[1].height = 34
+    for cell in sheet[1]:
+        cell.fill = PatternFill("solid", fgColor="285F99")
+        cell.font = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.fitToWidth, sheet.page_setup.fitToHeight = 1, 0
+
+
+""" ----------- 2 - CREATE THE FOUR WORKSHEETS ----------- """
+
+
+def build_excel(report):
+    workbook = Workbook()
+    workbook.properties.creator = "ShipStation Excel Export"
+    workbook.properties.created = datetime.fromisoformat(report["generatedAt"]).replace(tzinfo=None)
+    items = workbook.active
+    items.title = report["shipDate"]
+    table(items, ITEM_COLUMNS, report["rows"])
+    table(workbook.create_sheet("Tracking Records"), TRACKING_COLUMNS, report["events"])
+    table(workbook.create_sheet("Print History"), PRINT_COLUMNS, report["printJobs"])
+    notes = [
+        ("Ship Date", report["displayDate"]),
+        ("Generated at (UTC)", report["generatedAt"]),
+        ("API mode", report["version"].upper()),
+        ("Coverage", report["coverage"]),
+        ("Order / shipment groups", report["recordCount"]),
+        ("Item rows", report["rowCount"]),
+        ("Groups missing tracking", report["missingTrackingCount"]),
+        ("Quantity meaning", report["quantityNote"]),
+        ("Matched Windows print jobs", report["printJobCount"]),
+        ("Print-history result", report["printHistoryNote"]),
+        (
+            "Print status meaning",
+            "Printed means Windows Event 307 was found and matched to an identifier in the document name. It does not prove that the physical paper came out correctly.",
+        ),
+        (
+            "No print match",
+            "No matching print record is not proof that an item was never printed. The job may have been printed on another computer, before logging was enabled, or under a generic document name.",
+        ),
+        (
+            "Prices",
+            "Line Total is Quantity times Unit Price, before separate tax, shipping or discount. Currency is not inferred; do not sum across currencies.",
+        ),
+        (
+            "Dates",
+            "The selected date is the API Ship Date calendar component, not Order Date, label creation date or carrier pickup. V1 queries use ShipStation's documented Pacific time. V2 uses ISO bounds. Compare the first live export with your account's Ship Date display.",
+        ),
+        (
+            "Missing values",
+            "Blank means unavailable, never guessed. V2 does not document original Order Date on shipment details. Shipment creation date is not substituted.",
+        ),
+        (
+            "Tracking",
+            "Records are linked by API IDs, not SKU or customer name. Multiple tracking numbers on a row do not establish which item was in which package.",
+        ),
+        (
+            "Unlinked records",
+            "V1 daily events not linked to a currently Shipped order remain in Tracking Records for review.",
+        ),
+        (
+            "Completeness",
+            "All pages are checked; required request failures stop the export. Coverage is limited to records ShipStation exposes to this API account and retains.",
+        ),
+        (
+            "Privacy",
+            "Credentials and reports are handled in memory. The downloaded workbook contains customer/order data; store it securely.",
+        ),
+    ] + [(f"Review {i}", issue) for i, issue in enumerate(report["issues"], 1)]
+    info = workbook.create_sheet("Read Me")
+    table(
+        info,
+        [("Report detail", "detail", 30), ("Explanation", "value", 110)],
+        [{"detail": name, "value": value} for name, value in notes],
+    )
+    for row in info.iter_rows(min_row=2):
+        info.row_dimensions[row[0].row].height = 50
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+===== END FILE: excel_export.py =====
+
+
+===== BEGIN FILE: public/local/index.html =====
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ShipStation Excel Export</title>
+    <link rel="icon" href="/favicon.svg">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <div>
+            <p class="small-title">LOCAL PYTHON PROGRAM · VERSION 1.2.0</p>
+            <h1>ShipStation Excel Export</h1>
+            <p>Choose a ShipStation key file and a ship date. The program creates the Excel report on this computer.</p>
+        </div>
+        <button id="exitButton" class="exit-button" type="button">Exit Program</button>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>Create daily report</h2>
+
+            <form id="reportForm">
+                <label for="credentialsFile">ShipStation API TXT file</label>
+                <input id="credentialsFile" type="file" accept=".txt,text/plain" required>
+
+                <label for="shipDate">Ship date</label>
+                <input id="shipDate" type="text" placeholder="MM/DD/YYYY" maxlength="10" required>
+
+                <button id="reportButton" class="main-button" type="submit">Create Excel Report</button>
+            </form>
+        </section>
+
+        <section class="card status-card">
+            <h2>Program status</h2>
+            <p id="statusMessage">Ready.</p>
+
+            <div class="progress-track" aria-hidden="true">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+
+            <div class="status-grid">
+                <div><span>Section</span><strong id="sectionValue">—</strong></div>
+                <div><span>Progress</span><strong id="pageValue">—</strong></div>
+                <div><span>Estimated time</span><strong id="timeValue">—</strong></div>
+            </div>
+        </section>
+
+        <section class="card information-card">
+            <h2>Print-history check</h2>
+            <p>The program only reads Windows print records. It never sends a document to a printer.</p>
+            <p>For a print match, Windows PrintService Operational logging must already be enabled and the print-job name must contain a tracking number, order number or ShipStation record ID.</p>
+        </section>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>
+
+===== END FILE: public/local/index.html =====
+
+
+===== BEGIN FILE: public/app.js =====
+
+const reportForm = document.getElementById("reportForm");
+const credentialsFile = document.getElementById("credentialsFile");
+const shipDate = document.getElementById("shipDate");
+const reportButton = document.getElementById("reportButton");
+const exitButton = document.getElementById("exitButton");
+
+const statusMessage = document.getElementById("statusMessage");
+const progressBar = document.getElementById("progressBar");
+const sectionValue = document.getElementById("sectionValue");
+const pageValue = document.getElementById("pageValue");
+const timeValue = document.getElementById("timeValue");
+
+
+// ----------- 1 - DEFAULT DATE -----------
+
+
+function setTodaysDate() {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const year = today.getFullYear();
+
+    shipDate.value = `${month}/${day}/${year}`;
+}
+
+
+// ----------- 2 - STATUS DISPLAY -----------
+
+
+function formatTime(seconds) {
+    if (!Number.isFinite(seconds)) {
+        return "—";
+    }
+
+    if (seconds < 60) {
+        return `${Math.max(0, Math.ceil(seconds))} seconds`;
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.ceil(seconds % 60);
+    return `${minutes} min ${remainingSeconds} sec`;
+}
+
+
+function showProgress(update) {
+    statusMessage.textContent = update.message || "Working...";
+
+    if (update.section) {
+        sectionValue.textContent = update.section;
+    }
+
+    if (update.currentPage && update.totalPages) {
+        pageValue.textContent = `${update.currentPage} of ${update.totalPages}`;
+        progressBar.style.width = `${Math.min(100, (update.currentPage / update.totalPages) * 100)}%`;
+    }
+
+    if (update.estimatedSeconds !== undefined) {
+        timeValue.textContent = formatTime(update.estimatedSeconds);
+    }
+}
+
+
+function showError(message) {
+    statusMessage.textContent = message;
+    statusMessage.className = "error-message";
+    reportButton.disabled = false;
+    reportButton.textContent = "Create Excel Report";
+}
+
+
+// ----------- 3 - DOWNLOAD EXCEL -----------
+
+
+function downloadExcel(base64File, reportDate) {
+    const binaryText = window.atob(base64File);
+    const fileBytes = new Uint8Array(binaryText.length);
+
+    for (let index = 0; index < binaryText.length; index += 1) {
+        fileBytes[index] = binaryText.charCodeAt(index);
+    }
+
+    const excelFile = new Blob(
+        [fileBytes],
+        {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+    );
+
+    const downloadLink = document.createElement("a");
+    downloadLink.href = URL.createObjectURL(excelFile);
+    downloadLink.download = `ShipStation_${reportDate}_Report.xlsx`;
+    downloadLink.click();
+
+    URL.revokeObjectURL(downloadLink.href);
+}
+
+
+// ----------- 4 - READ PROGRAM MESSAGES -----------
+
+
+async function readReportMessages(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let unfinishedText = "";
+
+    while (true) {
+        const result = await reader.read();
+        unfinishedText += decoder.decode(result.value || new Uint8Array(), {stream: !result.done});
+
+        const lines = unfinishedText.split("\n");
+        unfinishedText = lines.pop();
+
+        for (const line of lines) {
+            if (!line.trim()) {
+                continue;
+            }
+
+            const message = JSON.parse(line);
+
+            if (message.type === "progress") {
+                showProgress(message);
+            }
+
+            if (message.type === "error") {
+                throw new Error(message.message);
+            }
+
+            if (message.type === "complete") {
+                downloadExcel(message.report.fileBase64, message.report.shipDate);
+                statusMessage.textContent = `Complete. ${message.report.rowCount} Excel row(s) created and ${message.report.printJobCount} Windows print record(s) checked.`;
+                statusMessage.className = "success-message";
+                progressBar.style.width = "100%";
+                sectionValue.textContent = "Complete";
+                pageValue.textContent = "Done";
+                timeValue.textContent = "0 seconds";
+            }
+        }
+
+        if (result.done) {
+            break;
+        }
+    }
+}
+
+
+// ----------- 5 - CREATE REPORT -----------
+
+
+reportForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    if (!credentialsFile.files.length) {
+        showError("Choose the ShipStation API TXT file.");
+        return;
+    }
+
+    reportButton.disabled = true;
+    reportButton.textContent = "Creating Report...";
+    statusMessage.className = "";
+    progressBar.style.width = "2%";
+    sectionValue.textContent = "Starting";
+    pageValue.textContent = "—";
+    timeValue.textContent = "Calculating";
+
+    try {
+        const credentialsText = await credentialsFile.files[0].text();
+        const response = await fetch("/api/report", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                credentialsText: credentialsText,
+                shipDate: shipDate.value.trim()
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || "The report could not be created.");
+        }
+
+        await readReportMessages(response);
+    } catch (error) {
+        showError(error.message || "The report could not be created.");
+    } finally {
+        reportButton.disabled = false;
+        reportButton.textContent = "Create Excel Report";
+    }
+});
+
+
+// ----------- 6 - EXIT PROGRAM -----------
+
+
+exitButton.addEventListener("click", async function () {
+    exitButton.disabled = true;
+    statusMessage.textContent = "Closing the program...";
+
+    try {
+        await fetch("/api/exit", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: "{}"
+        });
+    } finally {
+        document.body.innerHTML = "<main class='closed-message'><h1>Program closed</h1><p>You may close this browser tab.</p></main>";
+    }
+});
+
+
+setTodaysDate();
+
+===== END FILE: public/app.js =====
+
+
+===== BEGIN FILE: public/style.css =====
+
+:root {
+    color-scheme: light;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #1f2933;
+    background: #eef2f5;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 30px;
+    padding: 34px max(5vw, 24px);
+    color: white;
+    background: #174c3c;
+}
+
+h1,
+h2,
+p {
+    margin-top: 0;
+}
+
+header p {
+    max-width: 720px;
+    margin-bottom: 0;
+    line-height: 1.55;
+}
+
+.small-title {
+    color: #d8b35c;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+main {
+    width: min(900px, 92vw);
+    margin: 28px auto 50px;
+}
+
+.card {
+    margin-bottom: 20px;
+    padding: 26px;
+    border: 1px solid #d2d9df;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 5px 18px rgba(31, 41, 51, 0.06);
+}
+
+form {
+    display: grid;
+    gap: 12px;
+}
+
+label {
+    margin-top: 8px;
+    font-weight: bold;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #aeb8c2;
+    border-radius: 7px;
+    font: inherit;
+}
+
+button {
+    padding: 12px 18px;
+    border: 0;
+    border-radius: 7px;
+    font: inherit;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.main-button {
+    margin-top: 12px;
+    color: white;
+    background: #174c3c;
+}
+
+.exit-button {
+    min-width: 130px;
+    color: white;    background: #a83232;
+}
+
+.progress-track {
+    height: 12px;
+    margin: 18px 0;
+    overflow: hidden;
+    border-radius: 20px;
+    background: #dfe5e9;
+}
+
+.progress-bar {
+    width: 0;
+    height: 100%;
+    background: #d8a83e;
+    transition: width 0.25s ease;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+
+.status-grid div {
+    padding: 12px;
+    border-radius: 7px;
+    background: #f2f5f6;
+}
+
+.status-grid span,
+.status-grid strong {
+    display: block;
+}
+
+.status-grid span {
+    margin-bottom: 5px;
+    color: #64717d;
+    font-size: 12px;
+}
+
+.information-card p {
+    line-height: 1.55;
+}
+
+.success-message {
+    color: #17633d;
+    font-weight: bold;
+}
+
+.error-message {
+    color: #9f2626;
+    font-weight: bold;
+}
+
+.closed-message {
+    margin-top: 80px;
+    text-align: center;
+}
+
+@media (max-width: 650px) {
+    header {
+        flex-direction: column;
+    }
+
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+===== END FILE: public/style.css =====
+
+
+===== BEGIN FILE: public/favicon.svg =====
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#174c3c"/><path d="m12 16 12-6 12 6v16l-12 6-12-6V16Zm0 0 12 6 12-6M24 22v16" fill="none" stroke="#f5f5ef" stroke-width="2" stroke-linejoin="round"/><path d="m27 28 3 3 6-7" fill="none" stroke="#e9b753" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+
+===== END FILE: public/favicon.svg =====
+
+
+===== BEGIN FILE: tests/test_export.py =====
+
+import base64
+import copy
+from datetime import date, datetime
+from http.client import HTTPConnection
+from io import BytesIO
+import json
+from pathlib import Path
+import sys
+import threading
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from openpyxl import load_workbook
+from requests.structures import CaseInsensitiveDict
+from app import make_server
+from excel_export import build_excel
+from shipstation import (
+    ShipStationAPI,
+    ReportError,
+    extract_report,
+    parse_credentials,
+    parse_ship_date,
+)
+
+V1 = "API_KEY=test_key_123456\nAPI_SECRET=test_secret_123456"
+V2 = "V2_API_KEY=test_key_123456"
+DAY = "08/27/2026"
+FAST = {"interval": 0, "sleep": lambda seconds: None}
+
+
+class Response:
+    def __init__(self, data, status=200, headers=None):
+        self.data, self.status_code = data, status
+        self.headers = CaseInsensitiveDict(headers or {})
+
+    def json(self):
+        if isinstance(self.data, Exception):
+            raise self.data
+        return copy.deepcopy(self.data)
+
+
+def envelope(key, rows, page=1, pages=1, total=None):
+    return {key: rows, "page": page, "pages": pages, "total": len(rows) if total is None else total}
+
+
+class Session:
+    def __init__(self, responder):
+        self.responder, self.calls, self.closed = responder, [], False
+
+    def get(self, url, **kwargs):
+        self.calls.append((url, copy.deepcopy({k: v for k, v in kwargs.items() if k != "auth"})))
+        return self.responder(url, kwargs)
+
+    def close(self):
+        self.closed = True
+
+
+def v1_session(missing=False, multiple=False, extra=False, ship_day="2026-08-27"):
+    orders = [
+        {
+            "orderId": i + 1,
+            "orderNumber": "00000000000000000" + str(i + 1),
+            "orderStatus": "shipped",
+            "orderDate": "2026-08-18T11:00:00" if i == 6 else "2026-08-26T11:00:00",
+            "shipDate": ship_day + "T00:00:00",
+            "shipTo": {"name": "Test Recipient"},
+            "advancedOptions": {"storeId": 42},
+            "items": [
+                {
+                    "orderItemId": 100 + i,
+                    "name": "Test item",
+                    "sku": "SAME-WATCH-SKU" if i >= 3 else "SKU-" + str(i),
+                    "quantity": 1,
+                    "unitPrice": 12.5,
+                }
+            ],
+        }
+        for i in range(7)
+    ]
+    events = [
+        {
+            "orderId": i + 1,
+            "orderNumber": order["orderNumber"],
+            "shipDate": ship_day + "T00:00:00",
+            "trackingNumber": "" if missing and i == 6 else "000000000000000000000" + str(i),
+            "carrierCode": "ups" if i < 2 else "amazon",
+            **(
+                {"shipmentId": "label-" + str(i)}
+                if i < 2
+                else {"fulfillmentId": "external-" + str(i)}
+            ),
+        }
+        for i, order in enumerate(orders)
+    ]
+    if multiple:
+        events.append(
+            {**events[0], "shipmentId": "extra-package", "trackingNumber": "SECOND-PACKAGE"}
+        )
+    if extra:
+        orders.append({**orders[0], "orderId": 8, "orderNumber": "missing-event-order"})
+
+    def respond(url, kwargs):
+        path = url.removeprefix("https://ssapi.shipstation.com")
+        if path.startswith("/orders/"):
+            order_id = int(path.rsplit("/", 1)[-1])
+            order = next((order for order in orders if order["orderId"] == order_id), None)
+            return Response(order or {}, 200 if order else 404)
+        key = url.rsplit("/", 1)[-1]
+        if key == "fulfillments":
+            return Response(envelope(key, [e for e in events if "fulfillmentId" in e]))
+        if key == "shipments":
+            return Response(envelope(key, [e for e in events if "shipmentId" in e]))
+        if key == "stores":
+            return Response([{"storeId": 42, "storeName": "Test Store"}])
+        if key == "orders":
+            page = kwargs["params"]["page"]
+            return Response(
+                envelope(key, orders[:3] if page == 1 else orders[3:], page, 2, len(orders))
+            )
+        raise AssertionError("Unexpected fixture path")
+
+    return Session(respond)
+
+
+def v2_session(missing_detail=False):
+    def respond(url, kwargs):
+        path = url.removeprefix("https://api.shipstation.com/v2")
+        if path == "/fulfillments":
+            return Response(
+                envelope(
+                    "fulfillments",
+                    [
+                        {
+                            "fulfillment_id": "f1",
+                            "shipment_id": "s1",
+                            "shipment_number": "EXTERNAL-ORDER",
+                            "ship_date": "2026-08-27T00:00:00Z",
+                            "tracking_number": "AMAZON-TRACKING",
+                            "fulfillment_carrier_friendly_name": "Amazon Logistics",
+                        }
+                    ],
+                )
+            )
+        if path == "/labels":
+            page = kwargs["params"]["page"]
+            records = (
+                [
+                    {
+                        "label_id": "l1",
+                        "shipment_id": "s2",
+                        "ship_date": "2026-08-27T00:00:00Z",
+                        "created_at": "2026-08-25T11:00:00Z",
+                        "tracking_number": "FIRST",
+                        "status": "completed",
+                    }
+                ]
+                if page == 1
+                else [
+                    {
+                        "label_id": "l2",
+                        "shipment_id": "s2",
+                        "ship_date": "2026-08-27T00:00:00Z",
+                        "tracking_number": "SECOND",
+                        "status": "completed",
+                    },
+                    {"label_id": "outside", "ship_date": "2026-08-26T00:00:00Z"},
+                ]
+            )
+            return Response(envelope("labels", records, page, 2, 3))
+        if path.startswith("/shipments/"):
+            if missing_detail and path.endswith("/s1"):
+                return Response({}, 404)
+            return Response(
+                {
+                    "shipment_number": "ORDER-" + path.split("/")[-1],
+                    "created_at": "2026-08-20T00:00:00Z",
+                    "items": [
+                        {"sku": "TEST-SKU", "name": "Test item", "quantity": 2, "unit_price": 15}
+                    ],
+                }
+            )
+        raise AssertionError("Unexpected fixture path")
+
+    return Session(respond)
+
+
+class ExportTests(unittest.TestCase):
+    def test_credentials_and_dates(self):
+        self.assertEqual(parse_credentials(V1)["version"], "v1")
+        self.assertEqual(parse_credentials("\ufeff# key\n" + V2)["version"], "v2")
+        self.assertEqual(parse_credentials("Abcd1234567890==")["key"], "Abcd1234567890==")
+        self.assertEqual(
+            parse_credentials("API Key: abc1234567890\nAPI Secret: abc4567890123")["version"], "v1"
+        )
+        self.assertEqual(parse_ship_date("02/29/2024")["next"], "2024-03-01")
+        self.assertEqual(parse_ship_date("12/31/2026")["next"], "2027-01-01")
+        for value in (
+            "",
+            "YOUR_API_KEY_HERE",
+            "V1_API_KEY=test_123456",
+            V1 + "\n" + V2,
+            "API_SECRET=test_123456",
+        ):
+            with self.subTest(value=value), self.assertRaises(ReportError):
+                parse_credentials(value)
+        for value in ("8/27/2026", "02/29/2026", "2026-08-27", "13/01/2026"):
+            with self.subTest(value=value), self.assertRaises(ReportError):
+                parse_ship_date(value)
+
+    def test_seven_orders_include_five_external_fulfillments(self):
+        session = v1_session()
+        progress = []
+        report = extract_report(V1, DAY, session=session, progress=progress.append, **FAST)
+        self.assertEqual(
+            (report["recordCount"], report["rowCount"], len(report["events"])), (7, 7, 7)
+        )
+        self.assertEqual(sum("Fulfillment" in r["source"] for r in report["rows"]), 5)
+        self.assertEqual(sum(r["sku"] == "SAME-WATCH-SKU" for r in report["rows"]), 4)
+        self.assertEqual(report["rows"][6]["orderDate"], "2026-08-18")
+        self.assertEqual(report["rows"][0]["store"], "Test Store")
+        self.assertTrue(session.closed)
+        page_updates = [update for update in progress if isinstance(update, dict)]
+        self.assertTrue(
+            any(
+                update["section"] == "Orders"
+                and update["currentPage"] == 1
+                and update["totalPages"] == 2
+                for update in page_updates
+            )
+        )
+        self.assertTrue(all(update["estimatedSeconds"] >= 0 for update in page_updates))
+        for url, kwargs in session.calls:
+            self.assertTrue(url.startswith("https://ssapi.shipstation.com/"))
+            self.assertFalse(kwargs["allow_redirects"])
+            self.assertEqual(kwargs["timeout"], (10, 45))
+            if url.endswith("/orders"):
+                self.assertEqual(kwargs["params"]["orderStatus"], "shipped")
+                self.assertNotIn("orderDateStart", kwargs["params"])
+                self.assertNotIn("createDateStart", kwargs["params"])
+
+    def test_today_uses_only_linked_order_details(self):
+        today = date.today()
+        session = v1_session(ship_day=today.isoformat())
+        progress = []
+        report = extract_report(
+            V1, today.strftime("%m/%d/%Y"), session=session, progress=progress.append, **FAST
+        )
+        self.assertEqual((report["recordCount"], report["rowCount"]), (7, 7))
+        self.assertEqual(sum(url.endswith("/orders") for url, _ in session.calls), 0)
+        self.assertEqual(sum("/orders/" in url for url, _ in session.calls), 7)
+        self.assertIn("Today's linked orders", report["coverage"])
+        self.assertTrue(
+            any(
+                isinstance(update, dict) and update["section"] == "Today's order details"
+                for update in progress
+            )
+        )
+
+    def test_missing_tracking_and_events_are_not_dropped(self):
+        report = extract_report(V1, DAY, session=v1_session(missing=True, extra=True), **FAST)
+        self.assertEqual(report["recordCount"], 8)
+        self.assertEqual(report["missingTrackingCount"], 2)
+        self.assertIn("No matching daily", report["rows"][-1]["warnings"])
+
+    def test_multiple_packages_do_not_duplicate_quantity(self):
+        report = extract_report(V1, DAY, session=v1_session(multiple=True), **FAST)
+        self.assertEqual(report["rowCount"], 7)
+        self.assertEqual(len(report["events"]), 8)
+        self.assertEqual(report["rows"][0]["quantity"], 1)
+        self.assertIn("SECOND-PACKAGE", report["rows"][0]["tracking"])
+
+    def test_windows_print_job_is_matched_without_printing(self):
+        def fake_print_history(selected_date):
+            self.assertEqual(selected_date, "2026-08-27")
+            return {
+                "available": True,
+                "note": "Synthetic Windows print history used by this test.",
+                "jobs": [
+                    {
+                        "recordId": 30701,
+                        "printedAt": "2026-08-27T10:30:00-04:00",
+                        "documentName": "Walmart_Label_000000000000000001.pdf",
+                        "userName": "Test User",
+                        "computerName": "PACKING-PC",
+                        "printerName": "Zebra Label Printer",
+                        "pages": 1,
+                    },
+                    {
+                        "recordId": 30702,
+                        "printedAt": "2026-08-27T11:00:00-04:00",
+                        "documentName": "Unrelated_Document.pdf",
+                        "userName": "Test User",
+                        "computerName": "PACKING-PC",
+                        "printerName": "Office Printer",
+                        "pages": 2,
+                    },
+                ],
+            }
+
+        report = extract_report(
+            V1,
+            DAY,
+            session=v1_session(),
+            print_history_reader=fake_print_history,
+            **FAST,
+        )
+        printed_row = next(row for row in report["rows"] if row["orderNumber"].endswith("1"))
+
+        self.assertEqual(printed_row["printStatus"], "Printed - Windows record found")
+        self.assertEqual(printed_row["printerName"], "Zebra Label Printer")
+        self.assertEqual(printed_row["printMatch"], "Order number")
+        self.assertEqual(report["printJobCount"], 1)
+        self.assertEqual(report["printJobs"][0]["matchedOrderNumbers"], "000000000000000001")
+        self.assertNotIn("Unrelated_Document.pdf", str(report["printJobs"]))
+
+    def test_void_return_and_other_day_exclusion(self):
+        original = v1_session()
+
+        def respond(url, kwargs):
+            response = original.responder(url, kwargs)
+            if url.endswith("/shipments"):
+                first = response.data["shipments"][0]
+                response.data["shipments"].extend(
+                    [
+                        {**first, "shipmentId": "void", "voided": True},
+                        {**first, "shipmentId": "return", "isReturnLabel": True},
+                        {**first, "shipmentId": "tomorrow", "shipDate": "2026-08-28T00:00:00"},
+                    ]
+                )
+            return response
+
+        report = extract_report(V1, DAY, session=Session(respond), **FAST)
+        self.assertEqual(len(report["events"]), 7)
+
+    def test_v2_older_labels_external_tracking_and_missing_order_date(self):
+        session = v2_session()
+        report = extract_report(V2, DAY, session=session, **FAST)
+        self.assertEqual((report["rowCount"], len(report["events"])), (2, 3))
+        self.assertEqual(report["rows"][0]["tracking"], "AMAZON-TRACKING")
+        self.assertEqual(report["rows"][0]["carrier"], "Amazon Logistics")
+        self.assertEqual(report["rows"][1]["tracking"], "FIRST; SECOND")
+        self.assertEqual(report["rows"][1]["quantity"], 2)
+        self.assertEqual(report["rows"][0]["orderDate"], "")
+        self.assertIn("Order date unavailable", report["rows"][0]["warnings"])
+        for url, kwargs in session.calls:
+            if url.endswith("/labels"):
+                self.assertNotIn("created_at_start", kwargs["params"])
+        self.assertEqual(sum(url.endswith("/shipments/s2") for url, _ in session.calls), 1)
+
+    def test_v2_missing_detail_preserves_tracking(self):
+        report = extract_report(V2, DAY, session=v2_session(missing_detail=True), **FAST)
+        row = next(r for r in report["rows"] if r["tracking"] == "AMAZON-TRACKING")
+        self.assertIsNone(row["quantity"])
+        self.assertIn("Shipment detail not found", row["warnings"])
+        self.assertIn("SKU unavailable", row["warnings"])
+
+    def test_auth_errors_redact_body_and_do_not_retry(self):
+        session = Session(lambda url, kwargs: Response("PRIVATE CREDENTIAL TEXT", 401))
+        with self.assertRaises(ReportError) as raised:
+            extract_report(V1, DAY, session=session, **FAST)
+        self.assertEqual(raised.exception.code, "AUTH")
+        self.assertNotIn("PRIVATE", str(raised.exception))
+        self.assertEqual(len(session.calls), 1)
+
+    def test_retry_and_partial_failure(self):
+        count = 0
+
+        def respond(url, kwargs):
+            nonlocal count
+            count += 1
+            return Response({}, 429, {"retry-after": "0"}) if count == 1 else Response({"ok": True})
+
+        self.assertTrue(
+            ShipStationAPI(parse_credentials(V2), session=Session(respond), **FAST).get("/labels")[
+                "ok"
+            ]
+        )
+        with self.assertRaises(ReportError) as raised:
+            extract_report(V2, DAY, session=Session(lambda url, kwargs: Response({}, 503)), **FAST)
+        self.assertEqual(raised.exception.code, "RETRY_LIMIT")
+
+    def test_pagination_failures(self):
+        cases = [
+            ({"labels": [{"label_id": "same"}], "pages": 2}, "PAGINATION"),
+            ({"labels": [], "total": 3, "pages": 2}, "PAGINATION"),
+            ({"unexpected": []}, "BAD_RESPONSE"),
+        ]
+        for data, code in cases:
+            client = ShipStationAPI(
+                parse_credentials(V2), session=Session(lambda url, kwargs: Response(data)), **FAST
+            )
+            with self.subTest(code=code), self.assertRaises(ReportError) as raised:
+                list(client.get_pages("/labels", "labels"))
+            self.assertEqual(raised.exception.code, code)
+
+    def test_excel_round_trip_strings_dates_prices_and_missing_fields(self):
+        report = extract_report(V1, DAY, session=v1_session(), **FAST)
+        report["rows"][0]["sku"] = '=HYPERLINK("https://example.invalid","test")'
+        book = load_workbook(BytesIO(build_excel(report)))
+        self.assertEqual(
+            book.sheetnames, ["2026-08-27", "Tracking Records", "Print History", "Read Me"]
+        )
+        sheet = book.worksheets[0]
+        self.assertEqual(sheet.max_row, 8)
+        self.assertEqual(sheet["A2"].value, "000000000000000001")
+        self.assertEqual(sheet["G2"].value, "0000000000000000000000")
+        self.assertEqual(sheet["C2"].data_type, "s")
+        self.assertEqual(sheet["E8"].value.date().isoformat(), "2026-08-18")
+        self.assertEqual(sheet["F2"].number_format, "mm/dd/yyyy")
+        self.assertEqual(sheet["J2"].value, 12.5)
+        self.assertEqual(sheet.freeze_panes, "A2")
+        self.assertNotIn("test_secret", str(list(book["Read Me"].values)))
+        v2 = extract_report(V2, DAY, session=v2_session(), **FAST)
+        self.assertIsNone(load_workbook(BytesIO(build_excel(v2))).worksheets[0]["E2"].value)
+
+    def test_empty_export_is_valid_excel(self):
+        session = Session(lambda url, kwargs: Response(envelope(url.rsplit("/", 1)[-1], [])))
+        report = extract_report(V2, DAY, session=session, **FAST)
+        self.assertEqual(report["rowCount"], 0)
+        self.assertEqual(load_workbook(BytesIO(build_excel(report))).worksheets[0].max_row, 1)
+
+    def test_local_server_returns_python_generated_excel(self):
+        public = ROOT / "public"
+        if not public.exists():
+            public = ROOT.parent / "standalone" / "public"
+        calls = []
+
+        def extractor(key, day, progress):
+            calls.append(day)
+            return extract_report(key, day, progress=progress, session=v1_session(), **FAST)
+
+        server = make_server(0, root=public, extractor=extractor)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        origin = f"http://127.0.0.1:{server.server_port}"
+
+        def request(method, path, data=None, headers=None):
+            connection = HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+            connection.request(
+                method,
+                path,
+                body=json.dumps(data) if data is not None else None,
+                headers=headers or {},
+            )
+            response = connection.getresponse()
+            result = response.status, response.read(), dict(response.getheaders())
+            connection.close()
+            return result
+
+        try:
+            status, page, _ = request("GET", "/")
+            self.assertEqual(status, 200)
+            self.assertIn(b"ShipStation Excel Export", page)
+            self.assertEqual(request("GET", "/app.py")[0], 404)
+            self.assertEqual(request("GET", "/", headers={"Host": "evil.invalid"})[0], 403)
+            headers = {"Origin": origin, "Content-Type": "application/json"}
+            self.assertEqual(
+                request("POST", "/api/report", {}, {**headers, "Origin": "https://evil.invalid"})[
+                    0
+                ],
+                403,
+            )
+            self.assertEqual(
+                request("POST", "/api/report", {"credentialsText": "a" * 25000}, headers)[0], 400
+            )
+            self.assertEqual(
+                request(
+                    "POST",
+                    "/api/report",
+                    {"credentialsText": V1, "shipDate": "02/30/2026"},
+                    headers,
+                )[0],
+                400,
+            )
+            self.assertEqual(calls, [])
+            status, body, response_headers = request(
+                "POST", "/api/report", {"credentialsText": V1, "shipDate": DAY}, headers
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(response_headers["Cache-Control"], "no-store")
+            events = [json.loads(line) for line in body.splitlines()]
+            self.assertEqual(events[-1]["type"], "complete")
+            self.assertNotIn(b"test_secret", body)
+            book = load_workbook(BytesIO(base64.b64decode(events[-1]["report"]["fileBase64"])))
+            self.assertEqual(book.worksheets[0].max_row, 8)
+            self.assertEqual(calls, [DAY])
+            status, body, _ = request("POST", "/api/exit", {}, headers)
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(body)["stopping"])
+            thread.join(2)
+            self.assertFalse(thread.is_alive())
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+===== END FILE: tests/test_export.py =====

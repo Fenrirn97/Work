@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="card narrow-card">
+  <p class="eyebrow">PROGRAM MESSAGE</p>
+  <h1>{{ title }}</h1>
+  <p>{{ message }}</p>
+  <a class="button button-primary" href="{{ url_for('index') }}">Return to the program</a>
+</section>
+{% endblock %}

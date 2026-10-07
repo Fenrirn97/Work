@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ShipStation Daily Shipment Check</title>
+    <link rel="icon" href="/favicon.svg">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <div>
+            <p class="small-title">LOCAL PYTHON PROGRAM · VERSION 0.5.1</p>
+            <h1>ShipStation Daily Shipment Check</h1>
+            <p>Read ShipStation's own Label Printed status and displayed print date/time, then combine it with the existing ShipStation Excel Export shipment and tracking data.</p>
+        </div>
+        <button id="exitButton" class="exit-button" type="button">Exit Program</button>
+    </header>
+
+    <main>
+        <section class="card priority-card">
+            <div class="section-heading">
+                <div>
+                    <p class="step-label">STEP 1 · PRIMARY CHECK</p>
+                    <h2>Read ShipStation Label Printed</h2>
+                </div>
+                <span class="priority-pill">Primary source</span>
+            </div>
+            <p>The program reads the <strong>Shipments → Label Printed</strong> column directly. It preserves the displayed text and does not substitute label creation time or Windows print time.</p>
+            <ol class="compact-list">
+                <li>Click <strong>Open ShipStation</strong>. Sign in if needed.</li>
+                <li>Open <strong>Shipments → Shipments</strong>, set the date/filter you want, and make sure <strong>Shipment #</strong>, <strong>Tracking #</strong>, and <strong>Label Printed</strong> columns are visible.</li>
+                <li>Return here and click <strong>Read Shipments Grid</strong>. The program will read the current filtered grid and page forward when ShipStation exposes a Next Page button.</li>
+            </ol>
+            <div class="button-row">
+                <button id="openShipStationButton" class="secondary-button" type="button">Open ShipStation</button>
+                <button id="readShipmentsButton" class="main-button" type="button">Read Shipments Grid</button>
+                <button id="downloadCaptureButton" class="secondary-button" type="button" disabled>Download Print Status Excel</button>
+            </div>
+            <p id="captureMessage" class="capture-message">No ShipStation print-status capture loaded yet.</p>
+            <div class="capture-grid">
+                <div><span>Rows read</span><strong id="captureRows">—</strong></div>
+                <div><span>Printed</span><strong id="capturePrinted">—</strong></div>
+                <div><span>Printed / time missing</span><strong id="captureMissingTime">—</strong></div>
+                <div><span>Printed / tracking missing</span><strong id="captureMissingTracking">—</strong></div>
+                <div><span>Unreadable cells</span><strong id="captureUnreadable">—</strong></div>
+                <div><span>Pages read</span><strong id="capturePages">—</strong></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <p class="step-label">STEP 2 · DAILY REPORT</p>
+            <h2>Create combined daily report</h2>
+            <p>If you read the Shipments grid first, the report matches ShipStation print status to shipment/tracking records. An order number by itself is not used as a package match.</p>
+            <form id="reportForm">
+                <label for="credentialsFile">ShipStation API TXT file</label>
+                <input id="credentialsFile" type="file" accept=".txt,text/plain" required>
+
+                <label for="shipDate">Ship date</label>
+                <input id="shipDate" type="text" placeholder="MM/DD/YYYY" maxlength="10" required>
+
+                <button id="reportButton" class="main-button" type="submit">Create Combined Excel Report</button>
+            </form>
+        </section>
+
+        <section class="card status-card">
+            <h2>Program status</h2>
+            <p id="statusMessage">Ready.</p>
+
+            <div class="progress-track" aria-hidden="true">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+
+            <div class="status-grid">
+                <div><span>Section</span><strong id="sectionValue">—</strong></div>
+                <div><span>Progress</span><strong id="pageValue">—</strong></div>
+                <div><span>Estimated time</span><strong id="timeValue">—</strong></div>
+            </div>
+        </section>
+
+        <section class="card information-card">
+            <h2>What the two print timestamps mean</h2>
+            <p><strong>ShipStation Displayed Print Time</strong> is the main field. It is copied from the Shipments → Label Printed cell and kept exactly as displayed. Until reprint behavior is validated on the live account, the program does not call it “first printed.”</p>
+            <p><strong>Windows Printed Date / Time</strong> remains a secondary check from Windows PrintService Event 307. It is not allowed to overwrite ShipStation's status.</p>
+            <p><strong>Printed + missing tracking</strong> and <strong>Printed + unreadable print time</strong> are both flagged for review.</p>
+        </section>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>

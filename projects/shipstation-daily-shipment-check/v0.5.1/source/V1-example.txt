@@ -1,0 +1,4 @@
+
+# Recommended for original Order Date. Replace BOTH placeholders.
+API_KEY=REPLACE_WITH_V1_API_KEY
+API_SECRET=REPLACE_WITH_V1_API_SECRET

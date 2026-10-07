@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ShipStation Print Time Capture</title>
+  <style>
+    body { font-family: Arial, sans-serif; width: 340px; padding: 14px; margin: 0; color: #1f2937; }
+    h1 { font-size: 17px; margin: 0 0 8px; }
+    p { font-size: 13px; line-height: 1.4; margin: 7px 0; }
+    button { width: 100%; border: 0; border-radius: 7px; padding: 11px; margin-top: 9px; font-weight: 700; cursor: pointer; background: #245f97; color: white; }
+    button:disabled { opacity: .55; cursor: default; }
+    button.secondary { background: #4b5563; }
+    #status { margin-top: 10px; padding: 9px; border-radius: 6px; background: #f3f4f6; white-space: pre-wrap; }
+    .small { color: #5b6470; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>ShipStation Print Time Capture</h1>
+  <p>Open <strong>Shipments → Shipments</strong>, apply your date/filter, and enable these columns under Columns: Shipment #, Order #, Tracking #, and Label Printed. They do not all need to fit on screen at once; the extension will temporarily scroll the ShipStation grid horizontally.</p>
+  <button id="capture">Capture this Shipments page</button>
+  <button id="diagnostic" class="secondary">Download Diagnostic TXT</button>
+  <div id="status">Ready.</div>
+  <p class="small">Capture sends only shipment identifiers and Label Printed text to the local checker at 127.0.0.1. Diagnostic TXT works even when the checker is closed and never includes your ShipStation password or API key.</p>
+  <script src="popup.js"></script>
+</body>
+</html>

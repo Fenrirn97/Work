@@ -1,0 +1,30 @@
+SHIPSTATION LABEL PRINTED — FIRST LIVE TEST CHECKLIST
+
+Before reading:
+[ ] Open ShipStation using the program's Open ShipStation button.
+[ ] Go to Shipments -> Shipments.
+[ ] Filter to a small known set (5-10 shipments).
+[ ] Enable Shipment #.
+[ ] Enable Tracking #.
+[ ] Enable Label Printed.
+[ ] Enable Order # if available.
+
+After clicking Read Shipments Grid:
+[ ] Row count looks correct.
+[ ] Known Printed shipment says Printed.
+[ ] Displayed print date/time matches ShipStation exactly.
+[ ] Known unprinted/Created shipment is not classified as Printed.
+[ ] Tracking number matches the same shipment.
+[ ] Printed + blank tracking is flagged.
+[ ] Printed + missing print time is flagged.
+[ ] No unreadable-cell warnings for rows that are visibly readable in ShipStation.
+
+Reprint test (do separately):
+[ ] Record one shipment's current ShipStation displayed print time.
+[ ] Reprint it using the normal ShipStation method.
+[ ] Read the grid again.
+[ ] Note whether ShipStation changed the displayed time.
+
+If a visible row is wrong, do not use the full catalog yet. Share a screenshot of the
+Shipments grid showing the column headers and one affected row (you can redact customer
+information) so the grid reader can be adjusted without guessing.

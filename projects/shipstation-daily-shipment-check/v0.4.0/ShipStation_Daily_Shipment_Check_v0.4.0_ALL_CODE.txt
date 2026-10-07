@@ -1,0 +1,3043 @@
+SHIPSTATION DAILY SHIPMENT CHECK — VERSION 0.4.0
+COMPLETE SOURCE CODE IN ONE TEXT FILE
+
+
+===== BEGIN FILE: README.txt =====
+
+SHIPSTATION DAILY SHIPMENT CHECK — VERSION 0.4.0
+=================================================
+
+PURPOSE
+-------
+This local Windows program combines three checks:
+
+1. ShipStation API shipment / fulfillment data for a selected Ship Date.
+2. A ShipStation shipment CSV exported by the user from the Shipped page/current view.
+   This provides Label Created, Label Printed, Marketplace Notified, etc.
+3. OPTIONAL public carrier tracking-page checks for UPS, FedEx and USPS.
+
+No UPS, FedEx or USPS API credentials are required in v0.4.0.
+
+For this program, "actually shipped" means the carrier public tracking page shows
+physical carrier possession/movement. A tracking number or "Label Created" by itself
+does NOT count as shipped.
+
+STARTING THE PROGRAM
+--------------------
+1. Extract the entire folder/ZIP. Do not run START.cmd from inside the ZIP.
+2. Install Python 3.11 or newer if Windows does not already have it:
+   https://www.python.org/downloads/windows/
+3. Make sure Microsoft Edge or Google Chrome is installed. Edge is preferred.
+4. Double-click START.cmd.
+5. On first use, the program creates .venv and installs Requests, openpyxl and
+   Playwright. Internet is needed for this first Python-package installation.
+6. The program uses the Edge/Chrome already installed on the computer. It does NOT
+   download a separate Playwright browser.
+7. Your browser opens to http://127.0.0.1:8787.
+8. Keep the black terminal window open while using the program.
+9. Use the red Exit Program button when finished.
+
+IMPORTANT FIX FOR THE OLD PYTHON313 ERROR
+-----------------------------------------
+The launcher tests the existing .venv before using it. If the environment still
+points to an old/missing Python path (for example a removed Python313 installation),
+it deletes that broken .venv and recreates it with the Python currently installed on
+the computer.
+
+SHIPSTATION PRINT STATUS WORKFLOW
+---------------------------------
+1. Click "Open ShipStation Shipped Page" in the local program.
+2. ShipStation opens in the normal browser session.
+3. Select the date and shipments/rows you want to review.
+4. Use Export Shipments -> Current View.
+5. Back in the local program, select that CSV under "ShipStation Print Status CSV".
+6. Select the ShipStation API TXT file and the Ship Date.
+7. Optionally enable the carrier website check.
+8. Create the compared Excel report.
+
+The program does NOT automate your ShipStation password/login and does NOT click the
+shipment checkboxes for you. The user controls exactly what is exported.
+
+PRINT STATUS MATCHING
+---------------------
+For ShipStation-created label records, the program matches the CSV using:
+
+1. Exact Tracking # first.
+2. Order # second.
+3. CSV Shipment # against the API Order ID as a final safe fallback.
+
+SKU and customer/recipient name are never used to decide a shipment match.
+
+Because your warehouse prints through ShipStation Connect, a ShipStation-label row
+that is present in the selected CSV but has a blank Label Printed field is shown as:
+
+NOT PRINTED
+
+Fulfillment / marked-shipped records are not automatically flagged as NOT PRINTED,
+because they may not represent a ShipStation-created label record.
+
+OPTIONAL PUBLIC CARRIER CHECK
+-----------------------------
+Enable "Check whether packages were actually received by the carrier" to perform a
+public tracking-page check.
+
+ONLY these three carriers are supported:
+- UPS
+- FedEx
+- USPS
+
+The program uses the carrier/service already recorded by ShipStation and the exact
+tracking number. It opens a separate Microsoft Edge/Google Chrome automation window
+and visits each public tracking page. You can leave "Show the tracking window"
+checked so you can see the pages as they are checked.
+
+Public tracking pages used:
+- UPS:   https://www.ups.com/track
+- FedEx: https://www.fedex.com/en-us/tracking.html
+- USPS:  https://tools.usps.com/go/TrackConfirmAction_input.action
+
+No carrier developer account or carrier API key is needed.
+
+Normalized statuses:
+- LABEL CREATED          -> carrier has NOT accepted the package
+- CARRIER ACCEPTED       -> package physically received/picked up
+- IN TRANSIT             -> package moving in the carrier network
+- OUT FOR DELIVERY
+- DELIVERED
+- EXCEPTION              -> carrier issue requiring review
+- CANCELLED
+- MANUAL CHECK REQUIRED  -> page opened but could not be read reliably
+- INVALID TRACKING
+- UNSUPPORTED
+
+If UPS/FedEx/USPS asks for a CAPTCHA/human-verification step, blocks automated
+reading, or changes the tracking page, the program DOES NOT try to bypass that
+protection. It marks the tracking number MANUAL CHECK REQUIRED and keeps a clickable
+public tracking-page link in the Excel workbook.
+
+EXCEL OUTPUT
+------------
+The workbook contains:
+
+1. YYYY-MM-DD
+   Main combined order/item report. Print checks and carrier verification are next to
+   the shipment information so exceptions are easy to filter.
+
+2. Tracking Records
+   Raw ShipStation daily shipment/fulfillment records plus matched print/carrier state.
+
+3. Print Status CSV
+   The ShipStation CSV exactly as parsed. Tracking identifiers remain text.
+
+4. Carrier Tracking
+   One row per unique tracking number checked, including a clickable public tracking
+   page URL and the status the program read.
+
+5. Read Me
+   Run counts, definitions, limitations and audit notes.
+
+TRACKING NUMBER SAFETY
+----------------------
+Tracking numbers are identifiers, not numbers. The program keeps them as text.
+Scientific-notation values such as 9.40015020621792E+021 are NEVER used for a carrier
+website check because Excel may already have destroyed the original digits. The
+ShipStation API tracking value is preferred.
+
+SECURITY / PRIVACY
+------------------
+- The local app listens only on 127.0.0.1.
+- ShipStation API credentials are used only in memory for the run.
+- ShipStation credentials are not written into the Excel workbook.
+- Carrier checks use public tracking pages; no carrier password/API secret is stored.
+- The workbook contains customer/order information, so store it securely.
+- The carrier browser is a separate temporary Edge/Chrome automation session and is
+  closed when the tracking run finishes.
+
+LIMITATIONS
+-----------
+- Carrier websites can change their page structure at any time.
+- Carrier websites can display CAPTCHA or anti-bot checks; these are not bypassed.
+- A carrier may occasionally miss an origin scan. Carrier Accepted means the public
+  tracking page showed evidence of physical possession/movement. Label Created means
+  it did not.
+- A blank ShipStation Label Printed value is only considered NOT PRINTED when that
+  ShipStation-label record is actually present in the user-selected CSV.
+- If one order has multiple shipments and the CSV tracking number was corrupted by
+  Excel, Order # alone may be ambiguous; the program marks the match for review rather
+  than guessing.
+
+===== END FILE: README.txt =====
+
+
+===== BEGIN FILE: START.cmd =====
+
+@echo off
+setlocal EnableExtensions
+cd /d "%~dp0"
+
+echo ShipStation Daily Shipment Check v0.4.0
+
+echo Checking Python...
+set "PY_CMD="
+py -3 -c "import sys; assert sys.version_info >= (3,11)" >nul 2>nul
+if not errorlevel 1 set "PY_CMD=py -3"
+
+if not defined PY_CMD (
+  python -c "import sys; assert sys.version_info >= (3,11)" >nul 2>nul
+  if not errorlevel 1 set "PY_CMD=python"
+)
+
+if not defined PY_CMD (
+  echo.
+  echo Python 3.11 or newer was not found.
+  echo Install Python from https://www.python.org/downloads/windows/
+  echo Then run START.cmd again.
+  pause
+  exit /b 1
+)
+
+rem A copied or old virtual environment can point to a Python installation that no longer exists.
+rem Test the venv before using it; rebuild it automatically when it is broken.
+set "REBUILD_VENV=0"
+if not exist ".venv\Scripts\python.exe" set "REBUILD_VENV=1"
+if exist ".venv\Scripts\python.exe" (
+  ".venv\Scripts\python.exe" -c "import sys; print(sys.executable)" >nul 2>nul
+  if errorlevel 1 set "REBUILD_VENV=1"
+)
+
+if "%REBUILD_VENV%"=="1" (
+  if exist ".venv" (
+    echo Old or broken Python environment detected. Rebuilding it...
+    rmdir /s /q ".venv" >nul 2>nul
+  ) else (
+    echo Preparing the program for first use...
+  )
+  %PY_CMD% -m venv .venv
+  if errorlevel 1 goto setup_error
+)
+
+".venv\Scripts\python.exe" -c "import requests, openpyxl, playwright" >nul 2>nul
+if errorlevel 1 (
+  echo Installing the Python packages. Internet is needed for this first step.
+  ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
+  if errorlevel 1 goto setup_error
+)
+
+".venv\Scripts\python.exe" app.py
+if errorlevel 1 goto runtime_error
+exit /b 0
+
+:runtime_error
+echo.
+echo The app stopped because of an error. Review the message above.
+pause
+exit /b 1
+
+:setup_error
+echo.
+echo Setup did not finish.
+echo Check your internet connection and folder permissions, then try again.
+pause
+exit /b 1
+
+===== END FILE: START.cmd =====
+
+
+===== BEGIN FILE: requirements.txt =====
+
+requests>=2.32.0,<3
+openpyxl>=3.1.5,<4
+playwright>=1.50,<2
+
+===== END FILE: requirements.txt =====
+
+
+===== BEGIN FILE: ShipStation_API_KEY_TEMPLATE.txt =====
+
+# VERSION 1 (recommended for the fuller order report)
+API_KEY=replace_with_your_shipstation_v1_key
+API_SECRET=replace_with_your_shipstation_v1_secret
+
+# Do not keep V1 and V2 credentials in the same file.
+# For V2 instead use only:
+# V2_API_KEY=replace_with_your_shipstation_v2_key
+
+===== END FILE: ShipStation_API_KEY_TEMPLATE.txt =====
+
+
+===== BEGIN FILE: app.py =====
+
+"""Local Windows-friendly web app for ShipStation daily shipment checks."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import mimetypes
+import os
+from pathlib import Path
+import threading
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import unquote, urlsplit
+
+from carrier_tracking import add_carrier_tracking, mark_carrier_check_disabled
+from excel_export import build_excel
+from print_status import mark_no_print_csv, merge_print_status, parse_print_status_csv
+from shipstation import ReportError, extract_report, parse_credentials, parse_ship_date
+
+ROOT = Path(__file__).resolve().parent
+SHIPSTATION_SHIPPED_URL = "https://ship.shipstation.com/shipments/shipped"
+MAX_REQUEST_BYTES = 30 * 1024 * 1024
+BROWSER_SECURITY_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+}
+
+
+def make_server(port=8787, root=None, extractor=extract_report):
+    public_folder = Path(root or ROOT / "public").resolve()
+    export_lock = threading.Lock()
+
+    class BrowserRequestHandler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass
+
+        @property
+        def origin(self):
+            return f"http://127.0.0.1:{self.server.server_port}"
+
+        def headers_ok(self):
+            return self.headers.get("Host") == urlsplit(self.origin).netloc
+
+        def reply(self, status, content, content_type="application/json"):
+            if isinstance(content, dict):
+                content = json.dumps(content).encode("utf-8")
+            self.send_response(status)
+            for key, value in BROWSER_SECURITY_HEADERS.items():
+                self.send_header(key, value)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(content)
+
+        def do_GET(self):
+            if not self.headers_ok():
+                self.reply(403, {"error": "Open the displayed 127.0.0.1 address."})
+                return
+            path = unquote(urlsplit(self.path).path)
+            requested_file = (
+                public_folder / ("local/index.html" if path == "/" else path.lstrip("/"))
+            ).resolve()
+            if not requested_file.is_relative_to(public_folder) or not requested_file.is_file():
+                self.reply(404, {"error": "Not found."})
+                return
+            content_type = {
+                ".js": "text/javascript; charset=utf-8",
+                ".css": "text/css; charset=utf-8",
+                ".html": "text/html; charset=utf-8",
+                ".svg": "image/svg+xml",
+            }.get(requested_file.suffix)
+            self.reply(
+                200,
+                requested_file.read_bytes(),
+                content_type or mimetypes.guess_type(requested_file.name)[0] or "application/octet-stream",
+            )
+
+        do_HEAD = do_GET
+
+        def do_POST(self):
+            if (
+                not self.headers_ok()
+                or self.headers.get("Origin", self.origin) != self.origin
+                or self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none")
+            ):
+                self.reply(403, {"error": "Open this app directly at the displayed local address."})
+                return
+
+            request_path = urlsplit(self.path).path
+            if request_path == "/api/exit":
+                self.reply(200, {"stopping": True})
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
+
+            if request_path == "/api/open-shipstation":
+                opened = webbrowser.open(SHIPSTATION_SHIPPED_URL, new=2)
+                self.reply(
+                    200,
+                    {
+                        "opened": bool(opened),
+                        "url": SHIPSTATION_SHIPPED_URL,
+                        "message": "ShipStation opened. Select the shipments/date, then Export Shipments → Current View.",
+                    },
+                )
+                return
+
+            if request_path != "/api/report":
+                self.reply(404, {"error": "Not found."})
+                return
+            if not self.headers.get("Content-Type", "").startswith("application/json"):
+                self.reply(415, {"error": "Expected a JSON request."})
+                return
+
+            payload = {}
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 1 <= length <= MAX_REQUEST_BYTES or self.headers.get("Transfer-Encoding"):
+                    raise ReportError("The selected files are too large for one report run.")
+                self.connection.settimeout(60)
+                payload = json.loads(self.rfile.read(length))
+                if not isinstance(payload, dict):
+                    raise ValueError()
+                parse_credentials(payload.get("credentialsText"))
+                parse_ship_date(payload.get("shipDate"))
+                if payload.get("printCsvText"):
+                    parse_print_status_csv(payload["printCsvText"])
+            except (ValueError, TypeError, ReportError, OSError) as error:
+                self.reply(
+                    400,
+                    {
+                        "error": (
+                            str(error)
+                            if isinstance(error, ReportError)
+                            else "Choose valid files and a Ship Date in MM/DD/YYYY format."
+                        )
+                    },
+                )
+                return
+
+            if not export_lock.acquire(blocking=False):
+                self.reply(409, {"error": "An export is already running. Wait for it to finish."})
+                return
+
+            try:
+                self.send_response(200)
+                for key, value in BROWSER_SECURITY_HEADERS.items():
+                    self.send_header(key, value)
+                self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                self.send_header("Connection", "close")
+                self.end_headers()
+
+                def send(event):
+                    self.wfile.write(
+                        (json.dumps(event, ensure_ascii=True, allow_nan=False) + "\n").encode("utf-8")
+                    )
+                    self.wfile.flush()
+
+                def progress(update):
+                    if isinstance(update, dict):
+                        send({"type": "progress", **update})
+                    else:
+                        send({"type": "progress", "message": str(update)})
+
+                try:
+                    report = extractor(
+                        payload["credentialsText"], payload["shipDate"], progress=progress
+                    )
+                    payload["credentialsText"] = ""
+
+                    print_csv_text = payload.get("printCsvText") or ""
+                    if print_csv_text.strip():
+                        progress("Matching the selected ShipStation Print Status CSV...")
+                        records = parse_print_status_csv(print_csv_text)
+                        merge_print_status(report, records)
+                    else:
+                        mark_no_print_csv(report)
+                    payload["printCsvText"] = ""
+
+                    if payload.get("checkCarriers"):
+                        progress("Opening carrier tracking pages in Microsoft Edge / Chrome...")
+                        add_carrier_tracking(
+                            report,
+                            progress=progress,
+                            visible_browser=bool(payload.get("showCarrierBrowser", True)),
+                        )
+                    else:
+                        mark_carrier_check_disabled(report)
+
+                    progress("Creating the combined Excel report...")
+                    workbook = build_excel(report)
+                    summary = {
+                        key: report.get(key)
+                        for key in (
+                            "version",
+                            "shipDate",
+                            "rowCount",
+                            "recordCount",
+                            "missingTrackingCount",
+                            "printCsvRecordCount",
+                            "notPrintedRowCount",
+                            "carrierCheckCount",
+                            "carrierAcceptedCount",
+                            "carrierNotAcceptedCount",
+                            "carrierManualCount",
+                            "carrierErrorCount",
+                        )
+                    }
+                    summary["fileBase64"] = base64.b64encode(workbook).decode("ascii")
+                    send({"type": "complete", "report": summary})
+                except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                    pass
+                except Exception as error:
+                    try:
+                        send(
+                            {
+                                "type": "error",
+                                "message": (
+                                    str(error)
+                                    if isinstance(error, ReportError)
+                                    else "The report could not be completed. No partial Excel file was created."
+                                ),
+                            }
+                        )
+                    except OSError:
+                        pass
+            finally:
+                payload.clear()
+                export_lock.release()
+                self.close_connection = True
+
+    class LocalServer(ThreadingHTTPServer):
+        daemon_threads = True
+
+        def handle_error(self, request, client_address):
+            pass
+
+    return LocalServer(("127.0.0.1", port), BrowserRequestHandler)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="ShipStation Daily Shipment Check v0.4.0")
+    parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("SHIPSTATION_CHECK_PORT", "8787")))
+    args = parser.parse_args()
+
+    try:
+        server = make_server(args.port)
+    except OSError:
+        print("Cannot start the app. Close any older copy using port 8787, then try again.")
+        return 1
+
+    origin = f"http://127.0.0.1:{server.server_port}"
+    print(
+        "\nShipStation Daily Shipment Check v0.4.0\n"
+        f"Open {origin}\n"
+        "Keep this window open while the program is running.\n"
+    )
+    if not args.no_browser:
+        timer = threading.Timer(0.6, lambda: webbrowser.open(origin))
+        timer.daemon = True
+        timer.start()
+    try:
+        server.serve_forever(poll_interval=0.1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+===== END FILE: app.py =====
+
+
+===== BEGIN FILE: shipstation.py =====
+
+
+"""Read-only ShipStation extraction. Credentials and records are not persisted."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import math
+import re
+import time
+from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote
+
+import requests
+
+
+
+class ReportError(Exception):
+    def __init__(self, message, code="REPORT_ERROR"):
+        super().__init__(message)
+        self.code = code
+
+
+""" ----------- 1 - CHECK USER INPUT ----------- """
+
+
+def parse_credentials(text):
+    if not isinstance(text, str) or len(text.encode("utf-8")) > 16384:
+        raise ReportError("Choose a TXT file smaller than 16 KB.")
+    lines = [
+        s.strip()
+        for s in text.lstrip("\ufeff").splitlines()
+        if s.strip() and not s.strip().startswith("#")
+    ]
+    aliases = {
+        "key": ("API_KEY", "V1_API_KEY", "SHIPSTATION_API_KEY"),
+        "secret": ("API_SECRET", "V1_API_SECRET", "SHIPSTATION_API_SECRET"),
+        "v2": ("V2_API_KEY", "SHIPSTATION_V2_API_KEY"),
+    }
+    allowed = {name for names in aliases.values() for name in names}
+    fields = {}
+    for line in lines:
+        match = re.fullmatch(r"([a-zA-Z][a-zA-Z0-9_ -]*)\s*[:=]\s*(.+)", line)
+        if not match:
+            continue
+        name = re.sub(r"[ -]", "_", match[1].strip().upper())
+        if name not in allowed:
+            continue
+        if name in fields:
+            raise ReportError("The TXT file repeats a credential field.")
+        fields[name] = match[2].strip().strip("\"'")
+    values = {}
+    for group, names in aliases.items():
+        found = [fields[name] for name in names if name in fields]
+        if len(found) > 1:
+            raise ReportError("Keep only one key and its matching secret in the file.")
+        values[group] = found[0] if found else ""
+    key, secret, v2 = (values[k] for k in ("key", "secret", "v2"))
+    if v2 and (key or secret):
+        raise ReportError("Use V1 key + secret OR one V2 key, not both.")
+    if secret and not key or "V1_API_KEY" in fields and not secret:
+        raise ReportError("V1 requires both API_KEY and API_SECRET.")
+    value = v2 or key or (lines[0] if len(lines) == 1 and not fields else "")
+    if not value:
+        raise ReportError(
+            "No API key found. Use one V2 key, or API_KEY and API_SECRET on separate lines."
+        )
+    for part in (value, secret):
+        if part and (
+            not re.fullmatch(r"[\x21-\x7e]{8,512}", part)
+            or re.search(r"YOUR_|PASTE_|REPLACE_|HERE", part, re.I)
+        ):
+            raise ReportError(
+                "Replace the example text with real credentials. Keys cannot contain spaces."
+            )
+    return {"version": "v1" if secret else "v2", "key": value, "secret": secret}
+
+
+def parse_ship_date(value):
+    value = str(value).strip()
+    if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", value):
+        raise ReportError("Enter Ship Date as MM/DD/YYYY, for example 08/27/2026.")
+    try:
+        result = datetime.strptime(value, "%m/%d/%Y").date()
+        if not 2000 <= result.year <= 2099:
+            raise ValueError()
+    except ValueError:
+        raise ReportError("Enter a real calendar date between 2000 and 2099.") from None
+    return {
+        "display": value,
+        "iso": result.isoformat(),
+        "next": (result + timedelta(days=1)).isoformat(),
+    }
+
+
+def calendar_date(value):
+    if isinstance(value, str) and re.match(r"^\d{4}-\d{2}-\d{2}", value):
+        try:
+            return date.fromisoformat(value[:10]).isoformat()
+        except ValueError:
+            pass
+    return ""
+
+
+def as_id(value):
+    return "" if value is None else str(value)
+
+
+def number_or_none(value):
+    if value is None or value == "" or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+        return number if math.isfinite(number) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def joined(values):
+    return "; ".join(dict.fromkeys(str(v) for v in values if v is not None and v != ""))
+
+
+""" ----------- 2 - CONNECT TO SHIPSTATION ----------- """
+
+
+class ShipStationAPI:
+    def __init__(
+        self,
+        credentials,
+        progress=lambda message: None,
+        session=None,
+        interval=None,
+        sleep=time.sleep,
+    ):
+        self.version = credentials["version"]
+        self.base = (
+            "https://ssapi.shipstation.com"
+            if self.version == "v1"
+            else "https://api.shipstation.com/v2"
+        )
+        self.headers = {"Accept": "application/json"}
+        if self.version == "v1":
+            pair = (credentials["key"] + ":" + credentials["secret"]).encode("ascii")
+            self.headers["Authorization"] = "Basic " + base64.b64encode(pair).decode("ascii")
+        else:
+            self.headers["api-key"] = credentials["key"]
+        self.session = session if session is not None else requests.Session()
+        self.interval = (
+            interval if interval is not None else (1.6 if self.version == "v1" else 0.35)
+        )
+        self.progress, self.sleep, self.next_allowed = progress, sleep, 0
+
+    def get(self, path, **params):
+        if not re.fullmatch(r"/(orders|shipments|fulfillments|labels|stores)(/[^/?#]+)?", path):
+            raise ReportError("Unsupported API resource.")
+        for attempt in range(4):
+            if self.next_allowed > time.monotonic():
+                self.sleep(self.next_allowed - time.monotonic())
+            try:
+                # Explicit auth prevents an unrelated .netrc login overriding the uploaded key.
+                response = self.session.get(
+                    self.base + path,
+                    params=params,
+                    headers=self.headers,
+                    timeout=(10, 45),
+                    allow_redirects=False,
+                    auth=lambda request: request,
+                )
+            except requests.RequestException:
+                if attempt == 3:
+                    raise ReportError(
+                        "Cannot reach ShipStation. Check your internet connection and try again.",
+                        "NETWORK",
+                    ) from None
+                self.sleep(2**attempt)
+                continue
+            finally:
+                self.next_allowed = time.monotonic() + self.interval
+            status = response.status_code
+            if status == 401:
+                raise ReportError(
+                    "ShipStation rejected the credentials. Check API version, key and V1 secret.",
+                    "AUTH",
+                )
+            if status in (402, 403):
+                raise ReportError(
+                    "Your ShipStation account or key cannot access this API. Check plan and permissions.",
+                    "ACCESS",
+                )
+            if status == 429 or status >= 500:
+                if attempt == 3:
+                    raise ReportError(
+                        "ShipStation is busy or rate-limiting requests. Retry later; no partial file was created.",
+                        "RETRY_LIMIT",
+                    )
+                retry = response.headers.get("Retry-After") or response.headers.get(
+                    "X-Rate-Limit-Reset"
+                )
+                try:
+                    seconds = float(retry) if retry is not None else 2**attempt
+                except ValueError:
+                    try:
+                        seconds = max(0, parsedate_to_datetime(retry).timestamp() - time.time())
+                    except (ValueError, TypeError, OverflowError):
+                        seconds = 2**attempt
+                if not math.isfinite(seconds):
+                    seconds = 2**attempt
+                if seconds > 300:
+                    raise ReportError(
+                        "ShipStation requested a long pause. Please retry in a few minutes.",
+                        "RATE_LIMIT",
+                    )
+                self.progress("ShipStation requested a pause; retrying safely...")
+                self.sleep(max(1, seconds + 0.2))
+                continue
+            if not 200 <= status < 300:
+                raise ReportError(
+                    f"ShipStation returned HTTP {status} for {path.split('/')[1]}. No partial file was created.",
+                    f"HTTP_{status}",
+                )
+            try:
+                data = response.json()
+            except ValueError:
+                raise ReportError(
+                    "ShipStation returned an unexpected response instead of JSON.", "BAD_RESPONSE"
+                ) from None
+            if response.headers.get("X-Rate-Limit-Remaining") == "0":
+                reset = number_or_none(response.headers.get("X-Rate-Limit-Reset")) or 60
+                if reset > 300:
+                    raise ReportError(
+                        "ShipStation requested a long pause. Please retry later.", "RATE_LIMIT"
+                    )
+                self.next_allowed = time.monotonic() + max(0, reset)
+            return data
+        raise ReportError("ShipStation requests could not be completed.")
+
+    def get_pages(self, path, key, **params):
+        size = 500 if self.version == "v1" else 100
+        size_key = "pageSize" if self.version == "v1" else "page_size"
+        seen, received = set(), 0
+        section_started = time.monotonic()
+        for page in range(1, 1001):
+            self.progress(f"Reading {key}: page {page}...")
+            result = self.get(path, **params, page=page, **{size_key: size})
+            rows = result.get(key) if isinstance(result, dict) else None
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ReportError(
+                    f"ShipStation did not return the expected {key} list.", "BAD_RESPONSE"
+                )
+            pages, total = number_or_none(result.get("pages")), number_or_none(result.get("total"))
+            if not rows:
+                if total is not None and total > received or pages is not None and pages > page:
+                    raise ReportError(
+                        "An API page is missing. Please rerun; no partial file was created.",
+                        "PAGINATION",
+                    )
+                return
+            total_pages = (
+                int(pages)
+                if pages is not None and pages > 0
+                else (max(1, math.ceil(total / size)) if total is not None and total > 0 else None)
+            )
+            if total_pages:
+                average = max(self.interval + 0.25, (time.monotonic() - section_started) / page)
+                self.progress(
+                    {
+                        "message": f"Reading {key}: page {page} of {total_pages}...",
+                        "section": key.replace("_", " ").title(),
+                        "currentPage": page,
+                        "totalPages": total_pages,
+                        "estimatedSeconds": math.ceil(max(0, total_pages - page) * average),
+                    }
+                )
+            signature = hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).digest()
+            if signature in seen:
+                raise ReportError(
+                    "ShipStation repeated a page. Stopping to avoid incomplete or duplicate data.",
+                    "PAGINATION",
+                )
+            seen.add(signature)
+            received += len(rows)
+            yield rows
+            if pages is not None and pages > 0:
+                if page >= pages:
+                    return
+            elif total is not None:
+                if received >= total:
+                    return
+            elif len(rows) < size:
+                return
+        raise ReportError(
+            "The 1,000-page safety limit was reached. No partial file was created.", "PAGINATION"
+        )
+
+
+""" ----------- 3 - CREATE THE EXCEL ROWS ----------- """
+
+
+def make_tracking_record(record, source, version):
+    v1 = version == "v1"
+    return {
+        "recordId": as_id(
+            record.get("fulfillmentId", record.get("shipmentId"))
+            if v1
+            else record.get("fulfillment_id", record.get("label_id"))
+        ),
+        "shipmentId": as_id(record.get("shipmentId") if v1 else record.get("shipment_id")),
+        "orderId": as_id(record.get("orderId") if v1 else record.get("external_order_id")),
+        "orderNumber": as_id(
+            record.get("orderNumber")
+            if v1
+            else record.get("shipment_number") or record.get("external_order_id")
+        ),
+        "shipDate": calendar_date(record.get("shipDate") if v1 else record.get("ship_date")),
+        "tracking": joined(
+            [record.get("trackingNumber") if v1 else record.get("tracking_number")]
+            + [
+                p.get("tracking_number") or p.get("trackingNumber")
+                for p in record.get("packages") or []
+            ]
+        ),
+        "carrier": (
+            record.get("carrierCode")
+            if v1
+            else record.get("fulfillment_carrier_friendly_name")
+            or record.get("carrier_code")
+            or record.get("carrier_id")
+        )
+        or "",
+        "service": (
+            record.get("serviceCode") or record.get("fulfillmentServiceCode")
+            if v1
+            else record.get("fulfillment_service_code") or record.get("service_code")
+        )
+        or "",
+        "provider": (
+            record.get("sellerFillProviderName") or record.get("fulfillmentProviderCode")
+            if v1
+            else record.get("fulfillment_provider_friendly_name")
+            or record.get("fulfillment_provider_code")
+        )
+        or "",
+        "recipient": (record.get("shipTo" if v1 else "ship_to") or {}).get("name", ""),
+        "source": source,
+    }
+
+
+def make_item_row(
+    order_number, order_id, order_date, item, store, recipient, events, quantity_basis, warnings=()
+):
+    item = item or {}
+    quantity, price = number_or_none(item.get("quantity")), number_or_none(
+        item.get("unitPrice", item.get("unit_price"))
+    )
+    row = {
+        "orderNumber": as_id(order_number),
+        "orderId": as_id(order_id),
+        "orderDate": order_date,
+        "itemId": as_id(
+            item.get(
+                "orderItemId", item.get("sales_order_item_id", item.get("external_order_item_id"))
+            )
+        ),
+        "itemName": item.get("name") or "",
+        "sku": item.get("sku") or "",
+        "quantity": quantity,
+        "unitPrice": price,
+        "lineTotal": quantity * price if quantity is not None and price is not None else None,
+        "quantityBasis": quantity_basis,
+        "store": store or "",
+        "recipient": recipient or "",
+        "shipDate": events[0].get("shipDate", ""),
+    }
+    for field, event_field in {
+        "tracking": "tracking",
+        "carrier": "carrier",
+        "service": "service",
+        "fulfillmentProvider": "provider",
+        "shipmentIds": "shipmentId",
+        "recordIds": "recordId",
+        "source": "source",
+    }.items():
+        row[field] = joined(e.get(event_field) for e in events)
+    notes = list(warnings)
+    for key, label in (
+        ("tracking", "Tracking"),
+        ("sku", "SKU"),
+        ("itemName", "Item name"),
+        ("orderDate", "Order date"),
+    ):
+        if not row[key]:
+            notes.append(label + " unavailable")
+    if quantity is None:
+        notes.append("Quantity unavailable")
+    row["warnings"] = joined(notes)
+    return row
+
+
+""" ----------- 4 - GET A VERSION 1 REPORT ----------- """
+
+
+def get_v1_report(shipstation_api, day):
+    events, rows, issues, by_order, seen = [], [], [], {}, set()
+    params = {"shipDateStart": day["iso"] + " 00:00:00", "shipDateEnd": day["next"] + " 00:00:00"}
+    for key, source in (
+        ("fulfillments", "Fulfillment / marked shipped"),
+        ("shipments", "ShipStation label"),
+    ):
+        extra = {"includeShipmentItems": "true"} if key == "shipments" else {}
+        for page in shipstation_api.get_pages("/" + key, key, **params, **extra):
+            for record in page:
+                if (
+                    record.get("voided")
+                    or record.get("voidDate")
+                    or record.get("isReturnLabel")
+                    or calendar_date(record.get("shipDate")) != day["iso"]
+                ):
+                    continue
+                event = make_tracking_record(record, source, "v1")
+                identity = source, event["recordId"]
+                if event["recordId"] and identity in seen:
+                    continue
+                seen.add(identity)
+                events.append(event)
+                if event["orderId"]:
+                    by_order.setdefault(event["orderId"], []).append(event)
+    stores = {}
+    try:
+        result = shipstation_api.get("/stores")
+        if isinstance(result, list):
+            stores = {as_id(s.get("storeId")): s.get("storeName") for s in result}
+    except ReportError as error:
+        if error.code in ("AUTH", "ACCESS"):
+            raise
+        issues.append("Store names unavailable; Store ID is preserved instead.")
+    found = set()
+
+    def add_order(order, matched, notes=()):
+        identity = as_id(order.get("orderId"))
+        if identity and identity in found:
+            return
+        if identity:
+            found.add(identity)
+        notes = list(notes)
+        if not matched:
+            notes.append("No matching daily shipment/fulfillment record")        if not identity:
+            notes.append("Order ID unavailable; tracking cannot be matched safely")
+        if len(matched) > 1:
+            notes.append(
+                "Multiple shipment records: tracking is order-level, not item-to-package allocation"
+            )
+        selected = matched or [{"shipDate": day["iso"], "source": "Shipped order only"}]
+        items = [i for i in order.get("items") or [] if not i.get("adjustment")]
+        store_id = as_id((order.get("advancedOptions") or {}).get("storeId"))
+        for item in items or [None]:
+            rows.append(
+                make_item_row(
+                    order.get("orderNumber"),
+                    identity,
+                    calendar_date(order.get("orderDate")),
+                    item,
+                    stores.get(store_id) or store_id,
+                    (order.get("shipTo") or {}).get("name"),
+                    selected,
+                    "Order item quantity",
+                    notes,
+                )
+            )
+
+    is_today = day["iso"] == date.today().isoformat()
+    if is_today:
+        order_ids = sorted(by_order)
+        shipstation_api.progress(
+            f"Today's date selected: reading only {len(order_ids)} linked order(s)..."
+        )
+        details_started = time.monotonic()
+        for index, identity in enumerate(order_ids, 1):
+            matched = by_order[identity]
+            try:
+                order = shipstation_api.get("/orders/" + quote(identity, safe=""))
+                if not isinstance(order, dict):
+                    raise ReportError("Unexpected order detail response.", "BAD_RESPONSE")
+                status = order.get("orderStatus")
+                notes = (
+                    []
+                    if status == "shipped"
+                    else [
+                        f"Current order status is {status or 'unavailable'}; daily shipment retained"
+                    ]
+                )
+                add_order(order, matched, notes)
+            except ReportError as error:
+                if error.code != "HTTP_404":
+                    raise
+                found.add(identity)
+                first = matched[0]
+                rows.append(
+                    make_item_row(
+                        first["orderNumber"],
+                        identity,
+                        "",
+                        None,
+                        "",
+                        first["recipient"],
+                        matched,
+                        "Order item quantity",
+                        ["Order detail not found; tracking record retained"],
+                    )
+                )
+            average = max(
+                shipstation_api.interval + 0.25, (time.monotonic() - details_started) / index
+            )
+            shipstation_api.progress(
+                {
+                    "message": f"Reading today's order details: order {index} of {len(order_ids)}...",
+                    "section": "Today's order details",
+                    "currentPage": index,
+                    "totalPages": len(order_ids),
+                    "estimatedSeconds": math.ceil(max(0, len(order_ids) - index) * average),
+                }
+            )
+    else:
+        shipstation_api.progress(
+            "Earlier date selected: checking all Shipped orders, including orders placed on earlier dates..."
+        )
+        for page in shipstation_api.get_pages("/orders", "orders", orderStatus="shipped"):
+            for order in page:
+                identity = as_id(order.get("orderId"))
+                if identity in found or order.get("orderStatus") != "shipped":
+                    continue
+                matched = by_order.get(identity, []) if identity else []
+                if not matched and calendar_date(order.get("shipDate")) != day["iso"]:
+                    continue
+                add_order(order, matched)
+    for event in events:
+        if event["orderId"] not in found:
+            issues.append(
+                f"Daily record {event['recordId'] or '(no ID)'} is not linked to a currently Shipped order. Retained on Tracking Records."
+            )
+    strategy = (
+        "Today's linked orders + Shipments + Fulfillments"
+        if is_today
+        else "Full Shipped Orders history + Shipments + Fulfillments"
+    )
+    return {
+        "rows": rows,
+        "events": events,
+        "issues": issues,
+        "coverage": strategy,
+        "quantityNote": "Quantity is ORDER LINE quantity, not proof all units shipped that day. Split orders may span dates. Tracking is linked at order level; package allocation is not inferred.",
+    }
+
+
+""" ----------- 5 - GET A VERSION 2 REPORT ----------- """
+
+
+def get_v2_report(shipstation_api, day):
+    events, rows = [], []
+    for page in shipstation_api.get_pages(
+        "/fulfillments",
+        "fulfillments",
+        ship_date_start=day["iso"] + "T00:00:00Z",
+        ship_date_end=day["next"] + "T00:00:00Z",
+    ):
+        for record in page:
+            if (
+                not record.get("voided")
+                and not record.get("voided_at")
+                and calendar_date(record.get("ship_date")) == day["iso"]
+            ):
+                events.append(make_tracking_record(record, "Fulfillment / marked shipped", "v2"))
+    # V2 labels do not have a ship-date filter. Do not restrict label creation date.
+    shipstation_api.progress("Checking completed labels by Ship Date, not label creation date...")
+    for page in shipstation_api.get_pages("/labels", "labels", label_status="completed"):
+        for record in page:
+            if (
+                not record.get("voided")
+                and not record.get("voided_at")
+                and not record.get("is_return_label")
+                and record.get("status", "completed") == "completed"
+                and calendar_date(record.get("ship_date")) == day["iso"]
+            ):
+                events.append(make_tracking_record(record, "ShipStation label", "v2"))
+    events = list({(e["source"], e["recordId"] or i): e for i, e in enumerate(events)}.values())
+    groups = {}
+    for i, event in enumerate(events):
+        groups.setdefault(event["shipmentId"] or f"unmatched:{i}", []).append(event)
+    details_started = time.monotonic()
+    for index, (identity, group) in enumerate(groups.items(), 1):
+        shipstation_api.progress(f"Reading item details: shipment {index} of {len(groups)}...")
+        shipment, notes = {}, []
+        if identity.startswith("unmatched:"):
+            notes.append("Shipment ID unavailable; record preserved")
+        else:
+            try:
+                shipment = shipstation_api.get("/shipments/" + quote(identity, safe=""))
+                if not isinstance(shipment, dict):
+                    raise ReportError("Unexpected shipment detail response.", "BAD_RESPONSE")
+            except ReportError as error:
+                if error.code != "HTTP_404":
+                    raise
+                notes.append("Shipment detail not found; record preserved")
+        average = max(shipstation_api.interval + 0.25, (time.monotonic() - details_started) / index)
+        shipstation_api.progress(
+            {
+                "message": f"Reading item details: shipment {index} of {len(groups)}...",
+                "section": "Shipment details",
+                "currentPage": index,
+                "totalPages": len(groups),
+                "estimatedSeconds": math.ceil(max(0, len(groups) - index) * average),
+            }
+        )
+        if len(group) > 1:
+            notes.append("Multiple tracking records; item-to-package allocation is not inferred")
+        for item in shipment.get("items") or [{}]:
+            rows.append(
+                make_item_row(
+                    item.get("external_order_id")
+                    or shipment.get("shipment_number")
+                    or group[0]["orderNumber"],
+                    item.get("sales_order_id")
+                    or shipment.get("external_order_id")
+                    or group[0]["orderId"],
+                    "",
+                    item,
+                    shipment.get("order_source_code"),
+                    (shipment.get("ship_to") or {}).get("name") or group[0]["recipient"],
+                    group,
+                    "Shipment item quantity",
+                    notes,
+                )
+            )
+    return {
+        "rows": rows,
+        "events": events,
+        "issues": [
+            "V2 does not provide the original Order Date here or exact Shipped-status order reconciliation. Use a V1 key + secret for the fuller order-based report."
+        ],
+        "coverage": "V2 Fulfillments + completed Labels + Shipment items (limited order metadata)",
+        "quantityNote": "Quantity is SHIPMENT ITEM quantity. Labels for the same shipment are grouped so items are not multiplied by package count. Order Date is blank; shipment creation date is not substituted.",
+    }
+
+
+""" ----------- 6 - RUN THE COMPLETE REPORT ----------- """
+
+
+def extract_report(
+    credentials_text,
+    ship_date,
+    progress=lambda message: None,
+    **client_options,
+):
+    """Build the read-only ShipStation shipment report.
+
+    Print-status CSV matching and carrier checks are added later by their own modules so
+    the API extraction stays independent and easy to test.
+    """
+    credentials, day = parse_credentials(credentials_text), parse_ship_date(ship_date)
+    shipstation_api = ShipStationAPI(credentials, progress, **client_options)
+    try:
+        progress(
+            "Credentials recognized as "
+            + credentials["version"].upper()
+            + ". Starting read-only ShipStation export..."
+        )
+        if credentials["version"] == "v1":
+            report = get_v1_report(shipstation_api, day)
+        else:
+            report = get_v2_report(shipstation_api, day)
+    finally:
+        shipstation_api.session.close()
+        shipstation_api.headers.clear()
+        credentials.clear()
+
+    version = shipstation_api.version
+    report["rows"].sort(key=lambda r: (r["orderNumber"], r["sku"]))
+
+    def group_key(row):
+        return (
+            row["orderId"]
+            if version == "v1" and row["orderId"]
+            else row["shipmentIds"] or row["recordIds"] or row["orderNumber"]
+        )
+
+    report.update(
+        version=version,
+        shipDate=day["iso"],
+        displayDate=day["display"],
+        generatedAt=datetime.now(timezone.utc).isoformat(),
+        rowCount=len(report["rows"]),
+        recordCount=len({group_key(row) for row in report["rows"]}),
+        missingTrackingCount=len({group_key(row) for row in report["rows"] if not row["tracking"]}),
+    )
+    return report
+
+===== END FILE: shipstation.py =====
+
+
+===== BEGIN FILE: print_status.py =====
+
+"""Parse a user-exported ShipStation shipment-status CSV and merge it into API rows."""
+
+from __future__ import annotations
+
+import csv
+import io
+import re
+from collections import defaultdict
+
+from shipstation import ReportError
+
+EXPECTED_HEADERS = {
+    "Shipment #",
+    "Order #",
+    "Tracking #",
+    "Service",
+    "Recipient",
+    "Ship Date",
+    "Packing Slip Printed",
+    "Label Created",
+    "Label Printed",
+    "Marketplace Notified",
+    "Shipment Notification",
+    "Delivery Notification",
+}
+
+
+def clean(value):
+    return "" if value is None else str(value).strip()
+
+
+def normalize_tracking(value):
+    """Return a safe exact identifier or blank when Excel-style scientific notation destroyed it."""
+    value = clean(value).replace(" ", "")
+    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?[Ee][+-]?\d+", value):
+        return ""
+    return value.upper()
+
+
+def split_tracking(value):
+    parts = re.split(r"[;,\n\r]+", clean(value))
+    return [p.strip().upper() for p in parts if p.strip()]
+
+
+def parse_print_status_csv(csv_text):
+    if not csv_text or not str(csv_text).strip():
+        return []
+    if len(csv_text.encode("utf-8", errors="ignore")) > 25 * 1024 * 1024:
+        raise ReportError("The ShipStation CSV is larger than 25 MB.")
+
+    stream = io.StringIO(csv_text.lstrip("\ufeff"), newline="")
+    reader = csv.DictReader(stream)
+    if not reader.fieldnames:
+        raise ReportError("The ShipStation CSV has no header row.")
+    fieldnames = [clean(name).lstrip("\ufeff") for name in reader.fieldnames]
+    reader.fieldnames = fieldnames
+
+    minimum = {"Order #", "Tracking #", "Label Created", "Label Printed"}
+    missing = sorted(minimum - set(fieldnames))
+    if missing:
+        raise ReportError(
+            "This does not look like the ShipStation Print Status export. Missing column(s): "
+            + ", ".join(missing)
+        )
+
+    records = []
+    for raw in reader:
+        if not raw or not any(clean(value) for value in raw.values()):
+            continue
+        row = {clean(key): clean(value) for key, value in raw.items() if key is not None}
+        records.append(
+            {
+                "shipmentNumber": row.get("Shipment #", ""),
+                "orderNumber": row.get("Order #", ""),
+                "trackingRaw": row.get("Tracking #", ""),
+                "tracking": normalize_tracking(row.get("Tracking #", "")),
+                "service": row.get("Service", ""),
+                "recipient": row.get("Recipient", ""),
+                "shipDate": row.get("Ship Date", ""),
+                "packingSlipPrinted": row.get("Packing Slip Printed", ""),
+                "labelCreated": row.get("Label Created", ""),
+                "labelPrinted": row.get("Label Printed", ""),
+                "marketplaceNotified": row.get("Marketplace Notified", ""),
+                "shipmentNotification": row.get("Shipment Notification", ""),
+                "deliveryNotification": row.get("Delivery Notification", ""),
+            }
+        )
+    return records
+
+
+def _is_shipstation_label(row):
+    return "shipstation label" in clean(row.get("source")).lower()
+
+
+def _pick_candidate(api_row, by_tracking, by_order, by_order_id):
+    # Tracking is the safest join. Use all exact tracking numbers present in the API row.
+    tracking_candidates = []
+    for tracking in split_tracking(api_row.get("tracking")):
+        tracking_candidates.extend(by_tracking.get(tracking, []))
+    unique = {id(item): item for item in tracking_candidates}
+    if len(unique) == 1:
+        return next(iter(unique.values())), "Tracking #"
+    if len(unique) > 1:
+        # Narrow a multi-package order by order number when possible.
+        order_number = clean(api_row.get("orderNumber"))
+        narrowed = [item for item in unique.values() if item["orderNumber"] == order_number]
+        if len(narrowed) == 1:
+            return narrowed[0], "Tracking # + Order #"
+        return None, "Ambiguous tracking match"
+
+    order_number = clean(api_row.get("orderNumber"))
+    order_matches = by_order.get(order_number, []) if order_number else []
+    if len(order_matches) == 1:
+        return order_matches[0], "Order #"
+
+    # In the observed ShipStation export, "Shipment #" can correspond to the API Order ID.
+    order_id = clean(api_row.get("orderId"))
+    id_matches = by_order_id.get(order_id, []) if order_id else []
+    if len(id_matches) == 1:
+        return id_matches[0], "Shipment # = API Order ID"
+
+    if len(order_matches) > 1 or len(id_matches) > 1:
+        return None, "Ambiguous order match"
+    return None, "No match"
+
+
+def merge_print_status(report, records):
+    """Attach ShipStation Smart Document Tracking/export fields to report rows/events."""
+    by_tracking = defaultdict(list)
+    by_order = defaultdict(list)
+    by_order_id = defaultdict(list)
+    for item in records:
+        if item["tracking"]:
+            by_tracking[item["tracking"]].append(item)
+        if item["orderNumber"]:
+            by_order[item["orderNumber"]].append(item)
+        if item["shipmentNumber"]:
+            by_order_id[item["shipmentNumber"]].append(item)
+
+    matched_record_ids = set()
+    matched_rows = 0
+    not_printed_rows = 0
+
+    for row in report.get("rows", []):
+        row.update(
+            labelCreated="",
+            labelPrinted="",
+            packingSlipPrinted="",
+            marketplaceNotified="",
+            shipmentNotification="",
+            deliveryNotification="",
+            printMatch="",
+            printCheck="",
+            printCsvTracking="",
+        )
+
+        if not _is_shipstation_label(row):
+            row["printCheck"] = "N/A - Fulfillment / marked shipped"
+            continue
+
+        match, match_type = _pick_candidate(row, by_tracking, by_order, by_order_id)
+        row["printMatch"] = match_type
+        if not match:
+            row["printCheck"] = (
+                "REVIEW - ambiguous CSV match"
+                if "Ambiguous" in match_type
+                else "NOT IN SELECTED PRINT STATUS CSV"
+            )
+            continue
+
+        matched_rows += 1
+        matched_record_ids.add(id(match))
+        row["labelCreated"] = match["labelCreated"]
+        row["labelPrinted"] = match["labelPrinted"]
+        row["packingSlipPrinted"] = match["packingSlipPrinted"]
+        row["marketplaceNotified"] = match["marketplaceNotified"]
+        row["shipmentNotification"] = match["shipmentNotification"]
+        row["deliveryNotification"] = match["deliveryNotification"]
+        row["printCsvTracking"] = match["trackingRaw"]
+
+        if match["labelPrinted"].strip().lower() == "printed":
+            row["printCheck"] = "PRINTED"
+        else:
+            row["printCheck"] = "NOT PRINTED"
+            not_printed_rows += 1
+
+    # Attach print status to raw tracking records too, so the workbook can be audited at shipment level.
+    for event in report.get("events", []):
+        temp = {
+            "tracking": event.get("tracking", ""),
+            "orderNumber": event.get("orderNumber", ""),
+            "orderId": event.get("orderId", ""),
+        }
+        match, match_type = _pick_candidate(temp, by_tracking, by_order, by_order_id)
+        event["labelCreated"] = match["labelCreated"] if match else ""
+        event["labelPrinted"] = match["labelPrinted"] if match else ""
+        event["marketplaceNotified"] = match["marketplaceNotified"] if match else ""
+        event["printMatch"] = match_type
+
+    report["printStatusRecords"] = records
+    report["printCsvProvided"] = True
+    report["printCsvRecordCount"] = len(records)
+    report["printCsvMatchedRows"] = matched_rows
+    report["notPrintedRowCount"] = not_printed_rows
+    report["unmatchedPrintCsvCount"] = len(records) - len(matched_record_ids)
+    return report
+
+
+def mark_no_print_csv(report):
+    for row in report.get("rows", []):
+        row.update(
+            labelCreated="",
+            labelPrinted="",
+            packingSlipPrinted="",
+            marketplaceNotified="",
+            shipmentNotification="",
+            deliveryNotification="",
+            printMatch="",
+            printCsvTracking="",
+            printCheck=(
+                "NOT CHECKED - no ShipStation CSV selected"
+                if _is_shipstation_label(row)
+                else "N/A - Fulfillment / marked shipped"
+            ),
+        )
+    for event in report.get("events", []):
+        event.update(labelCreated="", labelPrinted="", marketplaceNotified="", printMatch="")
+    report.update(
+        printStatusRecords=[],
+        printCsvProvided=False,
+        printCsvRecordCount=0,
+        printCsvMatchedRows=0,
+        notPrintedRowCount=0,
+        unmatchedPrintCsvCount=0,
+    )
+    return report
+
+===== END FILE: print_status.py =====
+
+
+===== BEGIN FILE: carrier_tracking.py =====
+
+"""Optional public-web carrier tracking for UPS, FedEx and USPS only.
+
+This module does not use carrier API credentials. When enabled, it opens an
+installed Microsoft Edge or Google Chrome browser through Playwright, visits the
+public tracking page for each unique tracking number, and reads the rendered status.
+If a carrier blocks automation or asks for a CAPTCHA, the report keeps a direct
+tracking link and marks the row for manual review instead of attempting to bypass it.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import time
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import quote
+
+from shipstation import ReportError
+
+SUPPORTED = ("UPS", "FedEx", "USPS")
+
+
+def clean(value):
+    return "" if value is None else str(value).strip()
+
+
+def split_tracking(value):
+    return [p.strip() for p in re.split(r"[;,\n\r]+", clean(value)) if p.strip()]
+
+
+def valid_tracking_identifier(value):
+    value = clean(value).replace(" ", "")
+    if not value:
+        return False
+    # A value such as 9.40015020621792E+021 may already have lost digits in Excel.
+    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?[Ee][+-]?\d+", value):
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9]{7,40}", value))
+
+
+def normalize_carrier(carrier="", service="", provider="", tracking=""):
+    text = " ".join([clean(carrier), clean(service), clean(provider)]).lower()
+    t = clean(tracking).replace(" ", "").upper()
+
+    if "fedex" in text or "fdxe" in text or "fdxg" in text:
+        return "FedEx"
+    if "usps" in text or "stamps" in text or "endicia" in text or "postal" in text:
+        return "USPS"
+    if re.search(r"\bups\b", text) or "ups_" in text or "ups wallet" in text:
+        return "UPS"
+
+    # Fallback only when ShipStation carrier text is unavailable/non-descriptive.
+    if t.startswith("1Z") and len(t) >= 18:
+        return "UPS"
+    if t.isdigit() and len(t) in (20, 21, 22, 26, 34) and t.startswith(("9", "4")):
+        return "USPS"
+    if t.isdigit() and len(t) in (12, 15):
+        return "FedEx"
+    return "Unsupported"
+
+
+def build_tracking_url(carrier, tracking):
+    tracking = clean(tracking).replace(" ", "")
+    encoded = quote(tracking, safe="")
+    if carrier == "UPS":
+        return f"https://www.ups.com/track?loc=en_US&tracknum={encoded}"
+    if carrier == "FedEx":
+        return f"https://www.fedex.com/fedextrack/?trknbr={encoded}"
+    if carrier == "USPS":
+        return f"https://tools.usps.com/go/TrackConfirmAction?tLabels={encoded}"
+    return ""
+
+
+def _base_result(tracking, carrier):
+    return {
+        "tracking": clean(tracking),
+        "carrier": carrier,
+        "trackingUrl": build_tracking_url(carrier, tracking),
+        "status": "UNKNOWN",
+        "statusDescription": "",
+        "carrierAccepted": "Unknown",
+        "firstCarrierScan": "",
+        "latestScan": "",
+        "latestLocation": "",
+        "estimatedDelivery": "",
+        "actualDelivery": "",
+        "checkedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "error": "",
+    }
+
+
+def _finish(result, physical_seen=False):
+    status = result["status"]
+    if status in ("LABEL CREATED", "CANCELLED"):
+        result["carrierAccepted"] = "No"
+    elif status in ("CARRIER ACCEPTED", "IN TRANSIT", "OUT FOR DELIVERY", "DELIVERED"):
+        result["carrierAccepted"] = "Yes"
+    elif physical_seen:
+        result["carrierAccepted"] = "Yes"
+    else:
+        result["carrierAccepted"] = "Unknown"
+    return result
+
+
+def _normalized_identifier(value):
+    return re.sub(r"[^A-Z0-9]", "", clean(value).upper())
+
+
+def _relevant_lines(text, tracking):
+    lines = [re.sub(r"\s+", " ", line).strip() for line in clean(text).splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        return [], False
+
+    target = _normalized_identifier(tracking)
+    found_index = None
+    if target:
+        for index, line in enumerate(lines):
+            if target in _normalized_identifier(line):
+                found_index = index
+                break
+
+    if found_index is None:
+        # Do not classify help/footer text when the requested tracking identifier is
+        # not visible on the rendered result page.
+        return lines[:140], False
+
+    start = max(0, found_index - 30)
+    end = min(len(lines), found_index + 90)
+    return lines[start:end], True
+
+
+def _status_patterns(carrier):
+    # Patterns are intentionally specific. The first matching line in the shipment
+    # area wins so a historical "Label Created" lower on a delivered shipment does
+    # not override the current Delivered status near the top.
+    common = [
+        ("DELIVERED", ("delivered",)),
+        ("OUT FOR DELIVERY", ("out for delivery",)),
+    ]
+    if carrier == "UPS":
+        return common + [
+            ("CARRIER ACCEPTED", ("we have your package", "picked up", "origin scan")),
+            ("IN TRANSIT", ("on the way", "in transit", "departed from facility", "arrived at facility")),
+            ("LABEL CREATED", ("label created", "shipment ready for ups", "billing information received")),
+            ("EXCEPTION", ("exception", "delay", "delivery attempted", "returning to sender")),
+        ]
+    if carrier == "FedEx":
+        return common + [
+            ("CARRIER ACCEPTED", ("we have your package", "at drop off point", "picked up")),
+            ("IN TRANSIT", ("on the way", "in transit", "at fedex location", "departed fedex location")),
+            ("LABEL CREATED", ("label created", "shipment information sent to fedex")),
+            ("CANCELLED", ("shipment cancelled",)),
+            ("EXCEPTION", ("delay", "exception", "we tried to deliver", "returning to shipper")),
+        ]
+    if carrier == "USPS":
+        return common + [
+            (
+                "LABEL CREATED",
+                (
+                    "shipping label created, usps awaiting item",
+                    "usps awaiting item",
+                    "pre-shipment",
+                    "pre shipment",
+                    "picked up by shipping partner, usps awaiting item",
+                ),
+            ),
+            (
+                "CARRIER ACCEPTED",
+                (
+                    "usps in possession of item",
+                    "accepted at usps",
+                    "shipment received, package acceptance pending",
+                ),
+            ),
+            (
+                "IN TRANSIT",
+                (
+                    "moving through network",
+                    "in transit to next facility",
+                    "arrived at usps",
+                    "departed usps",
+                    "processed through usps",
+                    "processing at usps",
+                ),
+            ),
+            ("EXCEPTION", ("alert", "delivery attempted", "return to sender", "insufficient address")),
+        ]
+    return []
+
+
+def extract_browser_status(carrier, tracking, body_text):
+    """Classify the rendered public tracking page without relying on fragile CSS."""
+    result = _base_result(tracking, carrier)
+    lines, tracking_visible = _relevant_lines(body_text, tracking)
+    if not lines:
+        result.update(status="MANUAL CHECK REQUIRED", error="Carrier page returned no readable text.")
+        return _finish(result)
+    if not tracking_visible:
+        result.update(
+            status="MANUAL CHECK REQUIRED",
+            error="The requested tracking number was not visible on the rendered carrier result page.",
+        )
+        return _finish(result)
+
+    blocked_phrases = (
+        "verify you are human",
+        "captcha",
+        "access denied",
+        "temporarily blocked",
+        "unusual traffic",
+        "security check",
+        "robot or a human",
+    )
+    joined = "\n".join(lines).lower()
+    if any(phrase in joined for phrase in blocked_phrases):
+        result.update(
+            status="MANUAL CHECK REQUIRED",
+            error="Carrier website requested human verification or blocked automated reading.",
+        )
+        return _finish(result)
+
+    # Build exact match candidates with their line index. Earliest visible shipment
+    # status wins; this avoids footer/help text overriding the actual status.
+    candidates = []
+    for status, phrases in _status_patterns(carrier):
+        for line_index, line in enumerate(lines):
+            lower = line.lower()
+            for phrase in phrases:
+                if phrase in lower:
+                    candidates.append((line_index, status, line, phrase))
+                    break
+
+    if not candidates:
+        # Some USPS pages use the short status "Accepted" on its own.
+        if carrier == "USPS":
+            for line_index, line in enumerate(lines):
+                if line.strip().lower() == "accepted":
+                    candidates.append((line_index, "CARRIER ACCEPTED", line, "accepted"))
+                    break
+
+    if not candidates:
+        result.update(
+            status="MANUAL CHECK REQUIRED",
+            error="The public tracking page opened, but the program could not identify the current status.",
+        )
+        return _finish(result)
+
+    candidates.sort(key=lambda item: item[0])
+    _, status, line, _ = candidates[0]
+    result["status"] = status
+    result["statusDescription"] = line[:500]
+
+    physical_seen = status in ("CARRIER ACCEPTED", "IN TRANSIT", "OUT FOR DELIVERY", "DELIVERED")
+    return _finish(result, physical_seen=physical_seen)
+
+
+def _installed_browser_paths():
+    candidates = []
+    env = os.environ
+    roots = [env.get("PROGRAMFILES(X86)"), env.get("PROGRAMFILES"), env.get("LOCALAPPDATA")]
+    for root in [p for p in roots if p]:
+        candidates.extend(
+            [
+                Path(root) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+                Path(root) / "Google" / "Chrome" / "Application" / "chrome.exe",
+            ]
+        )
+    for command in ("msedge", "microsoft-edge", "chrome", "google-chrome", "chromium", "chromium-browser"):
+        found = shutil.which(command)
+        if found:
+            candidates.append(Path(found))
+    unique = []
+    seen = set()
+    for path in candidates:
+        key = str(path).lower()
+        if path.is_file() and key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
+
+
+class PublicTrackingBrowser:
+    def __init__(self, progress=lambda message: None, visible=True):
+        self.progress = progress
+        self.visible = bool(visible)
+        self._playwright = None
+        self._browser = None
+        self._context = None
+        self._page = None
+
+    def start(self):
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            raise ReportError(
+                "Browser tracking support is not installed. Close the program and run START.cmd again while connected to the internet."
+            ) from None
+
+        self._playwright = sync_playwright().start()
+        launch_errors = []
+
+        for channel in ("msedge", "chrome"):
+            try:
+                self._browser = self._playwright.chromium.launch(
+                    channel=channel,
+                    headless=not self.visible,
+                )
+                break
+            except Exception as error:
+                launch_errors.append(f"{channel}: {error.__class__.__name__}")
+
+        if self._browser is None:
+            for executable in _installed_browser_paths():
+                try:
+                    self._browser = self._playwright.chromium.launch(
+                        executable_path=str(executable),
+                        headless=not self.visible,
+                    )
+                    break
+                except Exception as error:
+                    launch_errors.append(f"{executable.name}: {error.__class__.__name__}")
+
+        if self._browser is None:
+            self.close()
+            raise ReportError(
+                "Could not start Microsoft Edge or Google Chrome for carrier tracking. "
+                "Install/update Edge or Chrome, then try again."
+            )
+
+        self._context = self._browser.new_context(locale="en-US", viewport={"width": 1280, "height": 900})
+        self._page = self._context.new_page()
+        self._page.set_default_timeout(7000)
+        self._page.set_default_navigation_timeout(30000)
+        return self
+
+    def close(self):
+        for obj in (self._context, self._browser):
+            try:
+                if obj:
+                    obj.close()
+            except Exception:
+                pass
+        self._context = None
+        self._browser = None
+        self._page = None
+        if self._playwright:
+            try:
+                self._playwright.stop()
+            except Exception:
+                pass
+        self._playwright = None
+
+    def _body_text(self):
+        try:
+            return self._page.locator("body").inner_text(timeout=5000)
+        except Exception:
+            return ""
+
+    def _wait_for_status(self, carrier, tracking, seconds=7.5):
+        deadline = time.monotonic() + seconds
+        latest = ""
+        while time.monotonic() < deadline:
+            latest = self._body_text()
+            result = extract_browser_status(carrier, tracking, latest)
+            if result["status"] != "MANUAL CHECK REQUIRED":
+                return result
+            # When the window is visible, give the user a short chance to complete a
+            # carrier-provided human-verification step. Hidden mode returns immediately.
+            if "human verification" in result.get("error", "").lower() and not self.visible:
+                return result
+            time.sleep(0.6)
+        return extract_browser_status(carrier, tracking, latest)
+
+    def _fill_tracking_input(self, tracking):
+        # Generic fallback used when a carrier changes its direct tracking URL.
+        inputs = self._page.locator("input")
+        try:
+            count = min(inputs.count(), 40)
+        except Exception:
+            count = 0
+
+        best = None
+        best_score = -1
+        for index in range(count):
+            item = inputs.nth(index)
+            try:
+                if not item.is_visible():
+                    continue
+                attrs = " ".join(
+                    clean(item.get_attribute(name))
+                    for name in ("placeholder", "aria-label", "name", "id", "title")
+                ).lower()
+            except Exception:
+                continue
+            score = 0
+            if "tracking" in attrs:
+                score += 6
+            if "track" in attrs:
+                score += 4
+            if "search" in attrs:
+                score += 2
+            if score > best_score:
+                best, best_score = item, score
+
+        if best is None or best_score <= 0:
+            return False
+        try:
+            best.fill(tracking)
+            best.press("Enter")
+            return True
+        except Exception:
+            return False
+
+    def check_one(self, tracking, carrier):
+        result = _base_result(tracking, carrier)
+        if not valid_tracking_identifier(tracking):
+            result.update(
+                status="INVALID TRACKING",
+                error="Tracking number is blank, malformed, or scientific notation.",
+            )
+            return _finish(result)
+        if carrier not in SUPPORTED:
+            result.update(status="UNSUPPORTED", error="Only UPS, FedEx and USPS are supported.")
+            return _finish(result)
+
+        url = build_tracking_url(carrier, tracking)
+        try:
+            self._page.goto(url, wait_until="domcontentloaded")
+            result = self._wait_for_status(carrier, tracking)
+            result["trackingUrl"] = url
+            if result["status"] != "MANUAL CHECK REQUIRED":
+                return result
+
+            # One fallback: open the carrier's public tracking page and type the number.
+            base_urls = {
+                "UPS": "https://www.ups.com/track?loc=en_US",
+                "FedEx": "https://www.fedex.com/en-us/tracking.html",
+                "USPS": "https://tools.usps.com/go/TrackConfirmAction_input.action",
+            }
+            self._page.goto(base_urls[carrier], wait_until="domcontentloaded")
+            if self._fill_tracking_input(tracking):
+                result = self._wait_for_status(carrier, tracking, seconds=8.5)
+                result["trackingUrl"] = url
+                return result
+
+            result["trackingUrl"] = url
+            return result
+        except Exception as error:
+            detail = clean(str(error)).splitlines()[0][:240]
+            result.update(
+                status="MANUAL CHECK REQUIRED",
+                error=(
+                    f"Carrier page could not be read automatically ({error.__class__.__name__})"
+                    + (f": {detail}" if detail else ".")
+                ),
+            )
+            return _finish(result)
+
+    def check_all(self, requests_to_check):
+        results = {}
+        if not requests_to_check:
+            return results
+
+        self.start()
+        try:
+            total = len(requests_to_check)
+            for index, item in enumerate(requests_to_check, 1):
+                tracking = item["tracking"]
+                carrier = item["carrier"]
+                self.progress(
+                    {
+                        "message": f"Carrier website {index} of {total}: {carrier} {tracking}",
+                        "section": "Carrier websites",
+                        "currentPage": index,
+                        "totalPages": total,
+                    }
+                )
+                results[tracking] = self.check_one(tracking, carrier)
+                # Be polite to public tracking sites and reduce accidental rate limiting.
+                if index < total:
+                    time.sleep(0.8)
+        finally:
+            self.close()
+        return results
+
+
+def _shipping_warning(row):
+    print_check = clean(row.get("printCheck"))
+    carrier_status = clean(row.get("carrierStatus"))
+    notified = clean(row.get("marketplaceNotified")).lower() == "notified"
+
+    if carrier_status == "LABEL CREATED" and print_check == "NOT PRINTED":
+        return "CRITICAL - NOT PRINTED AND NO CARRIER ACCEPTANCE"
+    if carrier_status == "LABEL CREATED" and notified:
+        return "MARKETPLACE NOTIFIED BUT NO CARRIER ACCEPTANCE"
+    if carrier_status == "LABEL CREATED" and print_check == "PRINTED":
+        return "PRINTED BUT NO CARRIER ACCEPTANCE"
+    if print_check == "NOT PRINTED" and row.get("carrierAccepted") == "Yes":
+        return "PRINT STATUS DISCREPANCY - CARRIER HAS PACKAGE"
+    if carrier_status == "EXCEPTION":        return "CARRIER EXCEPTION - REVIEW"
+    if carrier_status == "CANCELLED":
+        return "SHIPMENT CANCELLED - REVIEW"
+    if carrier_status == "MANUAL CHECK REQUIRED":
+        return "MANUAL CARRIER CHECK REQUIRED"
+    if carrier_status == "INVALID TRACKING":
+        return "INVALID TRACKING - REVIEW"
+    if carrier_status == "UNSUPPORTED":
+        return "UNSUPPORTED CARRIER"
+    if carrier_status in ("CARRIER ACCEPTED", "IN TRANSIT", "OUT FOR DELIVERY", "DELIVERED"):
+        return "OK - CARRIER ACCEPTED"
+    if carrier_status == "UNKNOWN":
+        return "UNKNOWN CARRIER STATUS - REVIEW"
+    return ""
+
+
+def add_carrier_tracking(report, progress=lambda message: None, visible_browser=True, browser_factory=None):
+    unique = {}
+    for row in report.get("rows", []):
+        for tracking in split_tracking(row.get("tracking")):
+            tracking = tracking.replace(" ", "")
+            carrier = normalize_carrier(
+                row.get("carrier"), row.get("service"), row.get("fulfillmentProvider"), tracking
+            )
+            unique.setdefault(tracking, {"tracking": tracking, "carrier": carrier})
+
+    browser_factory = browser_factory or PublicTrackingBrowser
+    tracker = browser_factory(progress=progress, visible=visible_browser)
+    carrier_results = tracker.check_all(list(unique.values()))
+
+    for row in report.get("rows", []):
+        trackings = [t.replace(" ", "") for t in split_tracking(row.get("tracking"))]
+        row_results = [carrier_results.get(t) for t in trackings]
+        row_results = [r for r in row_results if r]
+        if not row_results:
+            row.update(
+                normalizedCarrier="",
+                trackingUrl="",
+                carrierStatus="",
+                carrierStatusDescription="",
+                carrierAccepted="Unknown",
+                firstCarrierScan="",
+                latestCarrierScan="",
+                latestCarrierLocation="",
+                estimatedDelivery="",
+                actualDelivery="",
+                trackingCheckedAt="",
+                carrierCheckError="",
+                shippingWarning="NO TRACKING TO CHECK" if not clean(row.get("tracking")) else "",
+            )
+            continue
+
+        row["normalizedCarrier"] = "; ".join(dict.fromkeys(r["carrier"] for r in row_results))
+        row["trackingUrl"] = "; ".join(dict.fromkeys(r["trackingUrl"] for r in row_results if r["trackingUrl"]))
+        row["carrierStatus"] = "; ".join(dict.fromkeys(r["status"] for r in row_results))
+        row["carrierStatusDescription"] = "; ".join(
+            dict.fromkeys(r["statusDescription"] for r in row_results if r["statusDescription"])
+        )
+        accepted = [r["carrierAccepted"] for r in row_results]
+        row["carrierAccepted"] = (
+            "Yes" if accepted and all(x == "Yes" for x in accepted)
+            else ("No" if any(x == "No" for x in accepted) else "Unknown")
+        )
+        row["firstCarrierScan"] = "; ".join(
+            dict.fromkeys(r["firstCarrierScan"] for r in row_results if r["firstCarrierScan"])
+        )
+        row["latestCarrierScan"] = "; ".join(
+            dict.fromkeys(r["latestScan"] for r in row_results if r["latestScan"])
+        )
+        row["latestCarrierLocation"] = "; ".join(
+            dict.fromkeys(r["latestLocation"] for r in row_results if r["latestLocation"])
+        )
+        row["estimatedDelivery"] = "; ".join(
+            dict.fromkeys(r["estimatedDelivery"] for r in row_results if r["estimatedDelivery"])
+        )
+        row["actualDelivery"] = "; ".join(
+            dict.fromkeys(r["actualDelivery"] for r in row_results if r["actualDelivery"])
+        )
+        row["trackingCheckedAt"] = "; ".join(
+            dict.fromkeys(r["checkedAt"] for r in row_results if r["checkedAt"])
+        )
+        row["carrierCheckError"] = "; ".join(
+            dict.fromkeys(r["error"] for r in row_results if r["error"])
+        )
+        row["shippingWarning"] = _shipping_warning(row)
+
+    for event in report.get("events", []):
+        trackings = [t.replace(" ", "") for t in split_tracking(event.get("tracking"))]
+        event_results = [carrier_results.get(t) for t in trackings]
+        event_results = [r for r in event_results if r]
+        event["carrierStatus"] = "; ".join(dict.fromkeys(r["status"] for r in event_results))
+        event["carrierAccepted"] = (
+            "Yes" if event_results and all(r["carrierAccepted"] == "Yes" for r in event_results)
+            else ("No" if any(r["carrierAccepted"] == "No" for r in event_results) else "Unknown")
+        )
+
+    report["carrierTracking"] = list(carrier_results.values())
+    report["carrierCheckEnabled"] = True
+    report["carrierCheckCount"] = len(carrier_results)
+    report["carrierAcceptedCount"] = sum(1 for r in carrier_results.values() if r["carrierAccepted"] == "Yes")
+    report["carrierNotAcceptedCount"] = sum(1 for r in carrier_results.values() if r["carrierAccepted"] == "No")
+    report["carrierManualCount"] = sum(
+        1 for r in carrier_results.values() if r["status"] == "MANUAL CHECK REQUIRED"
+    )
+    report["carrierErrorCount"] = sum(
+        1 for r in carrier_results.values() if r["status"] in ("INVALID TRACKING", "MANUAL CHECK REQUIRED")
+    )
+    return report
+
+
+def mark_carrier_check_disabled(report):
+    for row in report.get("rows", []):
+        trackings = split_tracking(row.get("tracking"))
+        carrier = normalize_carrier(
+            row.get("carrier"), row.get("service"), row.get("fulfillmentProvider"),
+            trackings[0] if trackings else "",
+        )
+        url = build_tracking_url(carrier, trackings[0]) if len(trackings) == 1 and carrier in SUPPORTED else ""
+        row.update(
+            normalizedCarrier="",
+            trackingUrl=url,
+            carrierStatus="NOT CHECKED",
+            carrierStatusDescription="",
+            carrierAccepted="Unknown",
+            firstCarrierScan="",
+            latestCarrierScan="",
+            latestCarrierLocation="",
+            estimatedDelivery="",
+            actualDelivery="",
+            trackingCheckedAt="",
+            carrierCheckError="",
+            shippingWarning="",
+        )
+    for event in report.get("events", []):
+        event.update(carrierStatus="NOT CHECKED", carrierAccepted="Unknown")
+    report.update(
+        carrierTracking=[],
+        carrierCheckEnabled=False,
+        carrierCheckCount=0,
+        carrierAcceptedCount=0,
+        carrierNotAcceptedCount=0,
+        carrierManualCount=0,
+        carrierErrorCount=0,
+    )
+    return report
+
+===== END FILE: carrier_tracking.py =====
+
+
+===== BEGIN FILE: excel_export.py =====
+
+"""Create the combined Excel workbook in memory."""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from io import BytesIO
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+
+from shipstation import ReportError
+
+ITEM_COLUMNS = [
+    ("Order Number", "orderNumber", 24),
+    ("Item Name", "itemName", 42),
+    ("SKU", "sku", 34),
+    ("Quantity", "quantity", 10),
+    ("Order Date", "orderDate", 14),
+    ("Ship Date", "shipDate", 14),
+    ("Tracking Number(s)", "tracking", 28),
+    ("Carrier (ShipStation)", "carrier", 20),
+    ("Service", "service", 22),
+    ("Record Source", "source", 30),
+    ("Label Created", "labelCreated", 16),
+    ("Label Printed", "labelPrinted", 16),
+    ("Print Check", "printCheck", 32),
+    ("Print Match", "printMatch", 24),
+    ("Marketplace Notified", "marketplaceNotified", 20),
+    ("Shipment Notification", "shipmentNotification", 20),
+    ("Delivery Notification", "deliveryNotification", 20),
+    ("Carrier Used", "normalizedCarrier", 16),
+    ("Tracking Page", "trackingUrl", 48),
+    ("Carrier Status", "carrierStatus", 24),
+    ("Carrier Accepted?", "carrierAccepted", 18),
+    ("Carrier Status Detail", "carrierStatusDescription", 48),
+    ("First Carrier Scan", "firstCarrierScan", 24),
+    ("Latest Carrier Scan", "latestCarrierScan", 24),
+    ("Latest Scan Location", "latestCarrierLocation", 30),
+    ("Estimated Delivery", "estimatedDelivery", 24),
+    ("Actual Delivery", "actualDelivery", 24),
+    ("Shipping Warning", "shippingWarning", 46),
+    ("Carrier Check Error", "carrierCheckError", 42),
+    ("Store / Source Code", "store", 24),
+    ("Recipient", "recipient", 26),
+    ("Unit Price", "unitPrice", 12),
+    ("Line Total", "lineTotal", 13),
+    ("Fulfillment Provider", "fulfillmentProvider", 22),
+    ("Order ID", "orderId", 22),
+    ("Item ID", "itemId", 22),
+    ("Shipment IDs", "shipmentIds", 24),
+    ("Record IDs", "recordIds", 24),
+    ("Review Notes", "warnings", 54),
+]
+
+TRACKING_COLUMNS = [
+    ("Order Number / Shipment Reference", "orderNumber", 30),
+    ("Order ID / External Order ID", "orderId", 26),
+    ("Ship Date", "shipDate", 14),
+    ("Tracking Number(s)", "tracking", 28),
+    ("Carrier", "carrier", 22),
+    ("Service", "service", 22),
+    ("Shipment ID", "shipmentId", 24),
+    ("Record ID", "recordId", 24),
+    ("Record Source", "source", 30),
+    ("Label Created", "labelCreated", 16),
+    ("Label Printed", "labelPrinted", 16),
+    ("Marketplace Notified", "marketplaceNotified", 20),
+    ("Print Match", "printMatch", 24),
+    ("Carrier Status", "carrierStatus", 24),
+    ("Carrier Accepted?", "carrierAccepted", 18),
+    ("Recipient", "recipient", 26),
+]
+
+PRINT_STATUS_COLUMNS = [
+    ("Shipment #", "shipmentNumber", 22),
+    ("Order #", "orderNumber", 26),
+    ("Tracking # (raw CSV)", "trackingRaw", 28),
+    ("Tracking # (safe text)", "tracking", 28),
+    ("Service", "service", 22),
+    ("Recipient", "recipient", 26),
+    ("Ship Date", "shipDate", 16),
+    ("Packing Slip Printed", "packingSlipPrinted", 20),
+    ("Label Created", "labelCreated", 16),
+    ("Label Printed", "labelPrinted", 16),
+    ("Marketplace Notified", "marketplaceNotified", 20),
+    ("Shipment Notification", "shipmentNotification", 20),
+    ("Delivery Notification", "deliveryNotification", 20),
+]
+
+CARRIER_COLUMNS = [
+    ("Tracking Number", "tracking", 30),
+    ("Carrier", "carrier", 16),
+    ("Tracking Page", "trackingUrl", 48),
+    ("Status", "status", 24),
+    ("Carrier Accepted?", "carrierAccepted", 18),
+    ("Status Detail", "statusDescription", 52),
+    ("First Carrier Scan", "firstCarrierScan", 24),
+    ("Latest Scan", "latestScan", 24),
+    ("Latest Location", "latestLocation", 30),
+    ("Estimated Delivery", "estimatedDelivery", 24),
+    ("Actual Delivery", "actualDelivery", 24),
+    ("Checked At", "checkedAt", 24),
+    ("Error", "error", 46),
+]
+
+
+def _excel_date(value):
+    if not value:
+        return None
+    if isinstance(value, (date, datetime)):
+        return value
+    text = str(value).strip()
+    try:
+        if len(text) >= 10 and text[4] == "-":
+            return datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=None)
+        if len(text) == 10 and text[2] == "/":
+            return datetime.strptime(text, "%m/%d/%Y")
+    except ValueError:
+        return value
+    return value
+
+
+def _cell_fill(key, value):
+    text = str(value or "").upper()
+    if key in ("shippingWarning", "carrierCheckError") and value:
+        if "CRITICAL" in text or "ERROR" in text or "NO CARRIER ACCEPTANCE" in text:
+            return PatternFill("solid", fgColor="F4CCCC")
+        if "REVIEW" in text or "NOT CONFIGURED" in text or "UNSUPPORTED" in text:
+            return PatternFill("solid", fgColor="FFF2CC")
+    if key in ("printCheck", "labelPrinted"):
+        if text == "NOT PRINTED":
+            return PatternFill("solid", fgColor="F4CCCC")
+        if text == "PRINTED":
+            return PatternFill("solid", fgColor="D9EAD3")
+    if key == "carrierAccepted":
+        if text == "NO":
+            return PatternFill("solid", fgColor="F4CCCC")
+        if text == "YES":
+            return PatternFill("solid", fgColor="D9EAD3")
+    if key == "carrierStatus":
+        if "LABEL CREATED" in text:
+            return PatternFill("solid", fgColor="FCE5CD")
+        if text in ("DELIVERED", "IN TRANSIT", "CARRIER ACCEPTED", "OUT FOR DELIVERY"):
+            return PatternFill("solid", fgColor="D9EAD3")
+        if text in ("ERROR", "INVALID TRACKING", "EXCEPTION", "CANCELLED"):
+            return PatternFill("solid", fgColor="F4CCCC")
+        if text == "MANUAL CHECK REQUIRED":
+            return PatternFill("solid", fgColor="FFF2CC")
+    if key == "warnings" and value:
+        return PatternFill("solid", fgColor="FFF2CC")
+    return None
+
+
+def table(sheet, columns, records):
+    if len(records) > 1048575:
+        raise ReportError("This report exceeds Excel's row limit.")
+    sheet.append([header for header, _, _ in columns])
+    for index, (_, _, width) in enumerate(columns, 1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+
+    date_like_keys = {
+        "orderDate",
+        "shipDate",
+        "firstCarrierScan",
+        "latestCarrierScan",
+        "estimatedDelivery",
+        "actualDelivery",
+        "checkedAt",
+        "latestScan",
+    }
+
+    for row_index, record in enumerate(records, 2):
+        for column_index, (_, key, _) in enumerate(columns, 1):
+            value = record.get(key)
+            converted = _excel_date(value) if key in date_like_keys else value
+            if isinstance(converted, str) and len(converted) > 32767:
+                converted = converted[:32764] + "..."
+            cell = sheet.cell(row_index, column_index, converted)
+            if isinstance(converted, str):
+                cell.data_type = "s"
+                cell.number_format = "@"
+                if key == "trackingUrl" and converted.startswith("https://") and ";" not in converted:
+                    cell.hyperlink = converted
+                    cell.style = "Hyperlink"
+            elif isinstance(converted, datetime):
+                if key in ("orderDate", "shipDate"):
+                    cell.number_format = "mm/dd/yyyy"
+                else:
+                    cell.number_format = "mm/dd/yyyy h:mm AM/PM"
+            elif key in ("unitPrice", "lineTotal") and converted is not None:
+                cell.number_format = "#,##0.00"
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            fill = _cell_fill(key, value)
+            if fill:
+                cell.fill = fill
+        sheet.row_dimensions[row_index].height = 38
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    sheet.row_dimensions[1].height = 34
+    for cell in sheet[1]:
+        cell.fill = PatternFill("solid", fgColor="285F99")
+        cell.font = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.fitToWidth, sheet.page_setup.fitToHeight = 1, 0
+
+
+def build_excel(report):
+    workbook = Workbook()
+    workbook.properties.creator = "ShipStation Daily Shipment Check"
+    workbook.properties.created = datetime.fromisoformat(report["generatedAt"]).replace(tzinfo=None)
+
+    items = workbook.active
+    items.title = report["shipDate"]
+    table(items, ITEM_COLUMNS, report["rows"])
+    table(workbook.create_sheet("Tracking Records"), TRACKING_COLUMNS, report["events"])
+    table(workbook.create_sheet("Print Status CSV"), PRINT_STATUS_COLUMNS, report.get("printStatusRecords", []))
+    table(workbook.create_sheet("Carrier Tracking"), CARRIER_COLUMNS, report.get("carrierTracking", []))
+
+    notes = [
+        ("Program version", "0.4.0"),
+        ("Ship Date", report["displayDate"]),
+        ("Generated at (UTC)", report["generatedAt"]),
+        ("ShipStation API mode", report["version"].upper()),
+        ("Coverage", report["coverage"]),
+        ("Order / shipment groups", report["recordCount"]),
+        ("Item rows", report["rowCount"]),
+        ("Groups missing tracking", report["missingTrackingCount"]),
+        ("Print Status CSV selected", "Yes" if report.get("printCsvProvided") else "No"),
+        ("Print Status CSV records", report.get("printCsvRecordCount", 0)),
+        ("Rows matched to Print Status CSV", report.get("printCsvMatchedRows", 0)),
+        ("Rows flagged NOT PRINTED", report.get("notPrintedRowCount", 0)),
+        ("Unmatched CSV records", report.get("unmatchedPrintCsvCount", 0)),
+        ("Carrier verification selected", "Yes" if report.get("carrierCheckEnabled") else "No"),
+        ("Tracking numbers checked", report.get("carrierCheckCount", 0)),
+        ("Carrier accepted", report.get("carrierAcceptedCount", 0)),
+        ("No carrier acceptance", report.get("carrierNotAcceptedCount", 0)),
+        ("Manual carrier checks", report.get("carrierManualCount", 0)),
+        ("Carrier web check issues", report.get("carrierErrorCount", 0)),
+        (
+            "Meaning of shipped",
+            "For this report, a package is considered actually shipped only after UPS, FedEx or USPS reports physical carrier acceptance. Label Created alone is NOT treated as shipped.",
+        ),
+        (
+            "Print status",
+            "For ShipStation-label records, Label Printed comes from the user-exported ShipStation shipment CSV. Because the warehouse prints through ShipStation Connect, a blank Label Printed value is flagged as NOT PRINTED when the row is present in that CSV.",
+        ),
+        (
+            "Fulfillment records",
+            "Fulfillment / marked shipped records are not automatically treated as missing print records because they may not represent a ShipStation-created label.",
+        ),
+        (
+            "Matching order",
+            "Print-status matching uses exact tracking number first, then Order #, then the CSV Shipment # against the API Order ID. SKU and recipient name are never used to decide a shipment match.",
+        ),
+        (
+            "Tracking numbers are text",
+            "Tracking identifiers are always stored as text. Scientific-notation values from CSV are never used for a carrier website check because Excel may have destroyed their exact digits.",
+        ),
+        (
+            "Supported carriers",
+            "Automated carrier verification supports only UPS, FedEx and USPS. Unsupported carriers are not guessed.",
+        ),
+        (
+            "Carrier website limitations",
+            "If a carrier website blocks automated reading, asks for human verification, or changes its page, that tracking number is marked MANUAL CHECK REQUIRED. A clickable tracking-page link is kept for manual review.",
+        ),
+        ("Quantity meaning", report["quantityNote"]),
+        (
+            "Privacy",
+            "ShipStation API credentials are used in memory for the current run and are not written into the workbook or application logs. Carrier checks use public tracking pages and require no carrier API credentials.",
+        ),
+    ] + [(f"Review {i}", issue) for i, issue in enumerate(report.get("issues", []), 1)]
+
+    info = workbook.create_sheet("Read Me")
+    table(
+        info,
+        [("Report detail", "detail", 34), ("Explanation", "value", 110)],
+        [{"detail": name, "value": value} for name, value in notes],
+    )
+    for row in info.iter_rows(min_row=2):
+        info.row_dimensions[row[0].row].height = 48
+
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+===== END FILE: excel_export.py =====
+
+
+===== BEGIN FILE: public/local/index.html =====
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShipStation Daily Shipment Check</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div>
+    <p class="small-title">LOCAL WINDOWS PROGRAM · VERSION 0.4.0</p>
+    <h1>ShipStation Daily Shipment Check</h1>
+    <p>Compare the ShipStation API with the shipment Print Status CSV, and optionally check public UPS, FedEx and USPS tracking pages.</p>
+  </div>
+  <button id="exitButton" class="exit-button" type="button">Exit Program</button>
+</header>
+
+<main>
+  <section class="card step-card">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <h2>Get the ShipStation Print Status CSV</h2>
+      <p>Open ShipStation, go to the Shipped shipments view, select the date/shipments you want, then use <strong>Export Shipments → Current View</strong>.</p>
+      <button id="openShipStationButton" class="secondary-button" type="button">Open ShipStation Shipped Page</button>
+      <p id="shipStationMessage" class="help-text">Your normal browser session is used. The program does not type your ShipStation password.</p>
+    </div>
+  </section>
+
+  <section class="card step-card">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <h2>Create the combined report</h2>
+      <form id="reportForm">
+        <label for="credentialsFile">ShipStation API TXT file</label>
+        <input id="credentialsFile" type="file" accept=".txt,text/plain" required>
+
+        <label for="shipDate">Ship date</label>
+        <input id="shipDate" type="text" placeholder="MM/DD/YYYY" maxlength="10" required>
+
+        <label for="printCsvFile">ShipStation Print Status CSV <span class="optional">(recommended)</span></label>
+        <input id="printCsvFile" type="file" accept=".csv,text/csv">
+        <p class="help-text">ShipStation-label records are matched by tracking number first, then Order #, then API Order ID. A blank Label Printed value is flagged.</p>
+
+        <div class="carrier-box">
+          <label class="checkbox-label">
+            <input id="checkCarriers" type="checkbox">
+            <span><strong>Check whether packages were actually received by the carrier</strong><br>UPS, FedEx and USPS only. No carrier API keys are needed. “Label Created” is not treated as shipped.</span>
+          </label>
+          <div id="carrierBrowserArea" class="hidden">
+            <label class="checkbox-label small-checkbox">
+              <input id="showCarrierBrowser" type="checkbox" checked>
+              <span>Show the Microsoft Edge / Chrome tracking window while the program checks each package.</span>
+            </label>
+            <p class="help-text">The program visits each carrier's public tracking page with the tracking number. If a carrier asks for human verification or changes its page, the report marks that package <strong>MANUAL CHECK REQUIRED</strong> and keeps a clickable tracking link.</p>
+          </div>
+        </div>
+
+        <button id="reportButton" class="main-button" type="submit">Create Compared Excel Report</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="card status-card">
+    <h2>Program status</h2>
+    <p id="statusMessage">Ready.</p>
+    <div class="progress-track" aria-hidden="true"><div id="progressBar" class="progress-bar"></div></div>
+    <div class="status-grid">
+      <div><span>Section</span><strong id="sectionValue">—</strong></div>
+      <div><span>Progress</span><strong id="pageValue">—</strong></div>
+      <div><span>Estimated time</span><strong id="timeValue">—</strong></div>
+    </div>
+    <div id="summaryBox" class="summary-box hidden"></div>
+  </section>
+
+  <section class="card information-card">
+    <h2>What the report checks</h2>
+    <p><strong>ShipStation:</strong> orders, shipments, fulfillments, tracking numbers and the user-selected Print Status export.</p>
+    <p><strong>Printing:</strong> ShipStation-label rows in the selected CSV should show Label Printed when printed through ShipStation Connect.</p>
+    <p><strong>Carrier verification:</strong> optional browser check of the public UPS, FedEx and USPS tracking pages. No UPS/FedEx/USPS developer account is required.</p>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
+
+===== END FILE: public/local/index.html =====
+
+
+===== BEGIN FILE: public/app.js =====
+
+const reportForm = document.getElementById("reportForm");
+const credentialsFile = document.getElementById("credentialsFile");
+const printCsvFile = document.getElementById("printCsvFile");
+const shipDate = document.getElementById("shipDate");
+const checkCarriers = document.getElementById("checkCarriers");
+const carrierBrowserArea = document.getElementById("carrierBrowserArea");
+const showCarrierBrowser = document.getElementById("showCarrierBrowser");
+const reportButton = document.getElementById("reportButton");
+const exitButton = document.getElementById("exitButton");
+const openShipStationButton = document.getElementById("openShipStationButton");
+const shipStationMessage = document.getElementById("shipStationMessage");
+const statusMessage = document.getElementById("statusMessage");
+const progressBar = document.getElementById("progressBar");
+const sectionValue = document.getElementById("sectionValue");
+const pageValue = document.getElementById("pageValue");
+const timeValue = document.getElementById("timeValue");
+const summaryBox = document.getElementById("summaryBox");
+
+function setTodaysDate() {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  shipDate.value = `${month}/${day}/${today.getFullYear()}`;
+}
+
+function formatTime(seconds) {
+  if (seconds === undefined || seconds === null || Number.isNaN(Number(seconds))) return "Calculating";
+  seconds = Math.max(0, Math.round(Number(seconds)));
+  if (seconds < 60) return `${seconds} sec`;
+  return `${Math.floor(seconds / 60)} min ${seconds % 60} sec`;
+}
+
+function showProgress(update) {
+  statusMessage.textContent = update.message || "Working...";
+  statusMessage.className = "";
+  if (update.section) sectionValue.textContent = update.section;
+  if (update.currentPage && update.totalPages) {
+    pageValue.textContent = `${update.currentPage} of ${update.totalPages}`;
+    progressBar.style.width = `${Math.min(96, (update.currentPage / update.totalPages) * 90)}%`;
+  }
+  if (update.estimatedSeconds !== undefined) timeValue.textContent = formatTime(update.estimatedSeconds);
+}
+
+function showError(message) {
+  statusMessage.textContent = message;
+  statusMessage.className = "error-message";
+  reportButton.disabled = false;
+  reportButton.textContent = "Create Compared Excel Report";
+}
+
+function downloadExcel(base64File, reportDate) {
+  const binaryText = window.atob(base64File);
+  const fileBytes = new Uint8Array(binaryText.length);
+  for (let i = 0; i < binaryText.length; i += 1) fileBytes[i] = binaryText.charCodeAt(i);
+  const excelFile = new Blob([fileBytes], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(excelFile);
+  link.download = `Shipped_${reportDate}_Checked.xlsx`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function showSummary(report) {
+  const items = [
+    `Excel rows: ${report.rowCount ?? 0}`,
+    `Shipment groups: ${report.recordCount ?? 0}`,
+    `Not printed: ${report.notPrintedRowCount ?? 0}`,
+    `Tracking checked: ${report.carrierCheckCount ?? 0}`,
+    `Carrier accepted: ${report.carrierAcceptedCount ?? 0}`,
+    `No carrier acceptance: ${report.carrierNotAcceptedCount ?? 0}`,
+    `Manual carrier checks: ${report.carrierManualCount ?? 0}`,
+    `Carrier check issues: ${report.carrierErrorCount ?? 0}`
+  ];
+  summaryBox.innerHTML = items.map(x => `<span>${x}</span>`).join("");
+  summaryBox.classList.remove("hidden");
+}
+
+async function readReportMessages(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let unfinished = "";
+  while (true) {
+    const result = await reader.read();
+    unfinished += decoder.decode(result.value || new Uint8Array(), {stream: !result.done});
+    const lines = unfinished.split("\n");
+    unfinished = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const message = JSON.parse(line);
+      if (message.type === "progress") showProgress(message);
+      if (message.type === "error") throw new Error(message.message);
+      if (message.type === "complete") {
+        downloadExcel(message.report.fileBase64, message.report.shipDate);
+        statusMessage.textContent = "Complete. The combined Excel report has been downloaded.";
+        statusMessage.className = "success-message";
+        progressBar.style.width = "100%";
+        sectionValue.textContent = "Complete";
+        pageValue.textContent = "Done";
+        timeValue.textContent = "0 sec";
+        showSummary(message.report);
+      }
+    }
+    if (result.done) break;
+  }
+}
+
+checkCarriers.addEventListener("change", () => {
+  carrierBrowserArea.classList.toggle("hidden", !checkCarriers.checked);
+});
+
+openShipStationButton.addEventListener("click", async () => {
+  openShipStationButton.disabled = true;
+  shipStationMessage.textContent = "Opening ShipStation...";
+  try {
+    const response = await fetch("/api/open-shipstation", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not open ShipStation.");
+    shipStationMessage.textContent = data.message || "ShipStation opened.";
+  } catch (error) {
+    shipStationMessage.textContent = error.message || "Could not open ShipStation.";
+  } finally {
+    openShipStationButton.disabled = false;
+  }
+});
+
+reportForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!credentialsFile.files.length) {
+    showError("Choose the ShipStation API TXT file.");
+    return;
+  }
+
+  reportButton.disabled = true;
+  reportButton.textContent = "Creating Report...";
+  statusMessage.className = "";
+  statusMessage.textContent = "Reading selected files...";
+  progressBar.style.width = "2%";
+  sectionValue.textContent = "Starting";
+  pageValue.textContent = "—";
+  timeValue.textContent = "Calculating";
+  summaryBox.classList.add("hidden");
+
+  try {
+    const credentialsText = await credentialsFile.files[0].text();
+    const printCsvText = printCsvFile.files.length ? await printCsvFile.files[0].text() : "";
+    const response = await fetch("/api/report", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        credentialsText,
+        shipDate: shipDate.value.trim(),
+        printCsvText,
+        checkCarriers: checkCarriers.checked,
+        showCarrierBrowser: showCarrierBrowser.checked
+      })
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "The report could not be created.");
+    }
+    await readReportMessages(response);
+  } catch (error) {
+    showError(error.message || "The report could not be created.");
+  } finally {
+    reportButton.disabled = false;
+    reportButton.textContent = "Create Compared Excel Report";
+  }
+});
+
+exitButton.addEventListener("click", async () => {
+  exitButton.disabled = true;
+  statusMessage.textContent = "Closing the program...";
+  try {
+    await fetch("/api/exit", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+  } finally {
+    document.body.innerHTML = "<main class='closed-message'><h1>Program closed</h1><p>You may close this browser tab.</p></main>";
+  }
+});
+
+setTodaysDate();
+
+===== END FILE: public/app.js =====
+
+
+===== BEGIN FILE: public/style.css =====
+
+:root {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #1f2933;
+  background: #edf2f5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 30px;
+  padding: 34px max(5vw, 24px);
+  color: white;
+  background: #174c3c;
+}
+h1, h2, p { margin-top: 0; }
+header p { max-width: 850px; margin-bottom: 0; line-height: 1.5; }
+.small-title { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; opacity: .9; }
+main { width: min(1080px, calc(100% - 34px)); margin: 28px auto 56px; }
+.card {
+  background: white;
+  border: 1px solid #d9e2e8;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 14px rgba(31, 41, 51, .06);
+}
+.step-card { display: flex; gap: 20px; }
+.step-number {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #174c3c;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+}
+.step-content { flex: 1; }
+label { display: block; font-weight: 700; margin: 17px 0 7px; }
+input[type="file"], input[type="text"] {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #aebbc4;
+  border-radius: 7px;
+  background: #fff;
+  font: inherit;
+}
+.main-button, .secondary-button, .exit-button {
+  border: 0;
+  border-radius: 7px;
+  padding: 12px 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.main-button { margin-top: 22px; background: #174c3c; color: white; font-size: 16px; }
+.secondary-button { background: #285f99; color: white; }
+.exit-button { background: #a61b1b; color: white; }
+button:disabled { opacity: .55; cursor: wait; }
+.help-text { margin: 8px 0 0; color: #52616b; font-size: 13px; line-height: 1.45; }
+.optional { font-weight: 400; color: #6b7780; }
+.carrier-box {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid #c9d8df;
+  border-radius: 9px;
+  background: #f7fafb;
+}
+.checkbox-label { display: flex; gap: 12px; margin: 0; align-items: flex-start; cursor: pointer; }
+.checkbox-label input { margin-top: 4px; transform: scale(1.2); }
+.hidden { display: none !important; }
+.progress-track { width: 100%; height: 12px; overflow: hidden; border-radius: 999px; background: #e1e8ec; margin: 18px 0; }
+.progress-bar { width: 0; height: 100%; background: #2d7a61; transition: width .2s ease; }
+.status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.status-grid div { padding: 12px; background: #f5f8fa; border-radius: 8px; }
+.status-grid span { display: block; color: #64727c; font-size: 12px; margin-bottom: 5px; }
+.summary-box { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.summary-box span { background: #eef5f1; border: 1px solid #cddfd5; border-radius: 999px; padding: 7px 11px; font-size: 13px; }
+.error-message { color: #a61b1b; font-weight: 700; }
+.success-message { color: #166534; font-weight: 700; }
+.information-card p { margin-bottom: 10px; line-height: 1.5; }
+.closed-message { max-width: 700px; margin: 70px auto; text-align: center; }
+@media (max-width: 720px) {
+  header { flex-direction: column; }
+  .status-grid { grid-template-columns: 1fr; }
+  .step-card { flex-direction: column; }
+}
+
+===== END FILE: public/style.css =====
+
+
+===== BEGIN FILE: public/favicon.svg =====
+
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#174c3c"/><path d="m12 16 12-6 12 6v16l-12 6-12-6V16Zm0 0 12 6 12-6M24 22v16" fill="none" stroke="#f5f5ef" stroke-width="2" stroke-linejoin="round"/><path d="m27 28 3 3 6-7" fill="none" stroke="#e9b753" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+
+
+===== END FILE: public/favicon.svg =====
+
+
+===== BEGIN FILE: tests/test_core.py =====
+
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from carrier_tracking import (
+    build_tracking_url,
+    extract_browser_status,
+    normalize_carrier,
+    valid_tracking_identifier,
+)
+from excel_export import build_excel
+from print_status import merge_print_status, parse_print_status_csv
+
+
+class PrintStatusTests(unittest.TestCase):
+    def test_csv_keeps_tracking_as_text_and_marks_scientific_unsafe(self):
+        text = (
+            "Shipment #,Order #,Tracking #,Service,Recipient,Ship Date,Packing Slip Printed,"
+            "Label Created,Label Printed,Marketplace Notified,Shipment Notification,Delivery Notification\n"
+            "322564113,13-15170-13871,1ZE664G50323432871,UPS Ground,T J,09/17/2026,,Created,,Notified,Not Sent,Failed\n"
+            "111,ORDER2,9.40015020621792E+021,USPS Ground Advantage,A B,09/17/2026,,Created,Printed,Notified,Not Sent,Failed\n"
+        )
+        rows = parse_print_status_csv(text)
+        self.assertEqual(rows[0]["tracking"], "1ZE664G50323432871")
+        self.assertEqual(rows[1]["tracking"], "")
+        self.assertEqual(rows[1]["trackingRaw"], "9.40015020621792E+021")
+
+    def test_merge_matches_real_world_tracking(self):
+        csv_text = (
+            "Shipment #,Order #,Tracking #,Service,Recipient,Ship Date,Packing Slip Printed,"
+            "Label Created,Label Printed,Marketplace Notified,Shipment Notification,Delivery Notification\n"
+            "322564113,13-15170-13871,1ZE664G50323432871,UPS Ground,T J,09/17/2026,,Created,,Notified,Not Sent,Failed\n"
+        )
+        report = {
+            "rows": [{
+                "orderNumber": "13-15170-13871",
+                "orderId": "322564113",
+                "tracking": "1ZE664G50323432871",
+                "source": "ShipStation label",
+            }],
+            "events": [],
+        }
+        merge_print_status(report, parse_print_status_csv(csv_text))
+        self.assertEqual(report["rows"][0]["printCheck"], "NOT PRINTED")
+        self.assertEqual(report["rows"][0]["printMatch"], "Tracking #")
+        self.assertEqual(report["notPrintedRowCount"], 1)
+
+    def test_fulfillment_is_not_false_not_printed(self):
+        report = {
+            "rows": [{
+                "orderNumber": "A",
+                "orderId": "1",
+                "tracking": "383710885977",
+                "source": "Fulfillment / marked shipped",
+            }],
+            "events": [],
+        }
+        merge_print_status(report, [])
+        self.assertTrue(report["rows"][0]["printCheck"].startswith("N/A"))
+
+
+class CarrierTests(unittest.TestCase):
+    def test_supported_carrier_detection(self):
+        self.assertEqual(normalize_carrier("ups_walleted", "ups_ground", "", "1Z123"), "UPS")
+        self.assertEqual(normalize_carrier("fedex", "fedex_2day", "", "383710885977"), "FedEx")
+        self.assertEqual(normalize_carrier("stamps_com", "usps_ground_advantage", "", "940011"), "USPS")
+        self.assertEqual(normalize_carrier("", "", "", "1Z9999999999999999"), "UPS")
+
+    def test_tracking_identifier_rejects_scientific_notation(self):
+        self.assertFalse(valid_tracking_identifier("9.40015020621792E+021"))
+        self.assertTrue(valid_tracking_identifier("9400150206217922772301"))
+
+    def test_public_tracking_urls(self):
+        self.assertIn("tracknum=1ZE664G50323432871", build_tracking_url("UPS", "1ZE664G50323432871"))
+        self.assertIn("trknbr=383710885977", build_tracking_url("FedEx", "383710885977"))
+        self.assertIn("tLabels=9400150206217922772301", build_tracking_url("USPS", "9400150206217922772301"))
+
+    def test_ups_label_created_is_not_shipped(self):
+        body = """
+        Tracking Number 1ZE664G50323432871
+        Label Created
+        Estimated delivery date will be available when UPS receives the package.
+        """
+        result = extract_browser_status("UPS", "1ZE664G50323432871", body)
+        self.assertEqual(result["status"], "LABEL CREATED")
+        self.assertEqual(result["carrierAccepted"], "No")
+
+    def test_fedex_label_created_is_not_shipped(self):
+        body = """
+        383710885977
+        Label created
+        We'll add a delivery date as soon as we get your package.
+        """
+        result = extract_browser_status("FedEx", "383710885977", body)
+        self.assertEqual(result["status"], "LABEL CREATED")
+        self.assertEqual(result["carrierAccepted"], "No")
+
+    def test_usps_pre_shipment_is_not_shipped(self):
+        body = """
+        9400150206217922772301
+        Pre-Shipment
+        Shipping Label Created, USPS Awaiting Item
+        """
+        result = extract_browser_status("USPS", "9400150206217922772301", body)
+        self.assertEqual(result["status"], "LABEL CREATED")
+        self.assertEqual(result["carrierAccepted"], "No")
+
+    def test_physical_carrier_statuses(self):
+        ups = extract_browser_status("UPS", "1Z999999999999999999", "1Z999999999999999999\nWe Have Your Package")
+        fedex = extract_browser_status("FedEx", "383710885977", "383710885977\nOn the way")
+        usps = extract_browser_status("USPS", "9400150206217922772301", "9400150206217922772301\nUSPS in possession of item")
+        self.assertEqual(ups["carrierAccepted"], "Yes")
+        self.assertEqual(fedex["status"], "IN TRANSIT")
+        self.assertEqual(usps["status"], "CARRIER ACCEPTED")
+
+    def test_human_verification_is_not_bypassed(self):
+        body = "Tracking 383710885977\nPlease verify you are human to continue."
+        result = extract_browser_status("FedEx", "383710885977", body)
+        self.assertEqual(result["status"], "MANUAL CHECK REQUIRED")
+        self.assertEqual(result["carrierAccepted"], "Unknown")
+
+
+class ExcelSmokeTests(unittest.TestCase):
+    def test_workbook_builds(self):
+        report = {
+            "generatedAt": "2026-09-24T18:00:00+00:00",
+            "shipDate": "2026-09-17",
+            "displayDate": "09/17/2026",
+            "version": "v1",
+            "coverage": "test",
+            "recordCount": 1,
+            "rowCount": 1,
+            "missingTrackingCount": 0,
+            "quantityNote": "test",
+            "issues": [],
+            "printCsvProvided": True,
+            "printCsvRecordCount": 1,
+            "printCsvMatchedRows": 1,
+            "notPrintedRowCount": 1,
+            "unmatchedPrintCsvCount": 0,
+            "carrierCheckEnabled": True,
+            "carrierCheckCount": 1,
+            "carrierAcceptedCount": 0,
+            "carrierNotAcceptedCount": 1,
+            "carrierManualCount": 0,
+            "carrierErrorCount": 0,
+            "events": [],
+            "printStatusRecords": [],
+            "carrierTracking": [{
+                "tracking": "1ZE664G50323432871",
+                "carrier": "UPS",
+                "trackingUrl": build_tracking_url("UPS", "1ZE664G50323432871"),
+                "status": "LABEL CREATED",
+                "carrierAccepted": "No",
+                "statusDescription": "Label Created",
+                "firstCarrierScan": "",
+                "latestScan": "",
+                "latestLocation": "",
+                "estimatedDelivery": "",
+                "actualDelivery": "",
+                "checkedAt": "2026-09-24T14:00:00-04:00",
+                "error": "",
+            }],
+            "rows": [{
+                "orderNumber": "13-15170-13871",
+                "itemName": "Test",
+                "sku": "TEST",
+                "quantity": 1,                "orderDate": "2026-09-16",
+                "shipDate": "2026-09-17",
+                "tracking": "1ZE664G50323432871",
+                "carrier": "ups_walleted",
+                "service": "ups_ground",
+                "source": "ShipStation label",
+                "labelCreated": "Created",
+                "labelPrinted": "",
+                "printCheck": "NOT PRINTED",
+                "printMatch": "Tracking #",
+                "marketplaceNotified": "Notified",
+                "shipmentNotification": "Not Sent",
+                "deliveryNotification": "Failed",
+                "normalizedCarrier": "UPS",
+                "trackingUrl": build_tracking_url("UPS", "1ZE664G50323432871"),
+                "carrierStatus": "LABEL CREATED",
+                "carrierAccepted": "No",
+                "carrierStatusDescription": "Label Created",
+                "firstCarrierScan": "",
+                "latestCarrierScan": "",
+                "latestCarrierLocation": "",
+                "estimatedDelivery": "",
+                "actualDelivery": "",
+                "shippingWarning": "CRITICAL - NOT PRINTED AND NO CARRIER ACCEPTANCE",
+                "carrierCheckError": "",
+                "store": "Omega eBay",
+                "recipient": "T J",
+                "unitPrice": 35,
+                "lineTotal": 35,
+                "fulfillmentProvider": "",
+                "orderId": "322564113",
+                "itemId": "616592577",
+                "shipmentIds": "171703764",
+                "recordIds": "171703764",
+                "warnings": "",
+            }],
+        }
+        data = build_excel(report)
+        self.assertGreater(len(data), 5000)
+        self.assertEqual(data[:2], b"PK")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+===== END FILE: tests/test_core.py =====
