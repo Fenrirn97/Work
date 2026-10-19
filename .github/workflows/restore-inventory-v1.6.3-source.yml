@@ -1,0 +1,79 @@
+name: Restore Inventory v1.6.3 Source From Verified Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-inventory-v1.6.3-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  restore-and-verify:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Restore exact release source and run Windows tests
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archiveName = 'Inventory_Count_Web_App_v1.6.3_Expected_Units.zip'
+          $archive = Join-Path $env:RUNNER_TEMP $archiveName
+          gh release download inventory-v1.6.3 --repo $env:GITHUB_REPOSITORY --pattern $archiveName --dir $env:RUNNER_TEMP --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release ZIP download failed.' }
+          $sha = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = 'bd60efbd93d08040a72e00679a147c329f8681d8d7d77d8ae39f036a070d5ada'
+          if ($sha -ne $expected) { throw "Release checksum mismatch: $sha" }
+          $extract = Join-Path $env:RUNNER_TEMP 'inventory-verified'
+          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
+          $app = Join-Path $extract 'Inventory_Count_Web_App'
+          $prefix = 'projects/inventory-count-web-app/v1.6.3/source/'
+          $tracked = @(git ls-files -- $prefix)
+          if ($tracked.Count -lt 10) { throw 'Source checkout is unexpectedly incomplete.' }
+          $changed = 0
+          foreach ($repoPath in $tracked) {
+            $relative = $repoPath.Substring($prefix.Length)
+            $from = Join-Path $app ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
+            $to = Join-Path $env:GITHUB_WORKSPACE ($repoPath.Replace('/', [IO.Path]::DirectorySeparatorChar))
+            if (!(Test-Path -LiteralPath $from)) { throw "Release source missing: $relative" }
+            Copy-Item -LiteralPath $from -Destination $to -Force
+            $changed++
+          }
+          Write-Host "Restored $changed tracked source files from checksum-verified release ZIP."
+          Push-Location $app
+          try {
+            $python = Join-Path $app 'runtime/python.exe'
+            & $python -c "import inventory_app, inventory_app.xlsxio, server; print('Application imports OK')"
+            if ($LASTEXITCODE -ne 0) { throw 'Windows application import failed.' }
+            & $python -m unittest discover -s tests -p 'test_*.py'
+            if ($LASTEXITCODE -ne 0) { throw 'Windows regression tests failed.' }
+          }
+          finally { Pop-Location }
+          git add -- $prefix
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'No source differences; all tracked files match the verified portable ZIP.'
+          }
+          else {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Restore inventory v1.6.3 source from verified portable ZIP'
+            if ($LASTEXITCODE -ne 0) { throw 'Source commit failed.' }
+            git push origin HEAD:main
+            if ($LASTEXITCODE -ne 0) { throw 'Source push failed.' }
+          }
+
+      - name: Re-run portable release verification
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run publish-inventory-count-v1.6.3.yml --repo $env:GITHUB_REPOSITORY --ref main
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to dispatch release verification.' }
