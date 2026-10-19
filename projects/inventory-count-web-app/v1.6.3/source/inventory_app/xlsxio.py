@@ -305,7 +305,8 @@ def _display_memory(value: Any, default_unit: str = "GB") -> str:
 def split_model_memory(model_value: Any, ram_value: Any = "", storage_value: Any = "") -> tuple[str, str, str]:
     """Return separate model, RAM, and Storage values without inventing a 0+0 identity."""
 
-    model = clean_text(model_value)    ram = _display_memory(ram_value)
+    model = clean_text(model_value)
+    ram = _display_memory(ram_value)
     storage = _display_memory(storage_value)
     if ram or storage:
         if ram == "0" and storage == "0":

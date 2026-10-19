@@ -193,7 +193,8 @@ class IdentityRuleTests(unittest.TestCase):
                 "items_per_box": 10, "boxes": 4, "loose_items": 3, "area": "A",
             }
         )
-        self.assertEqual(result["amount"], 43)        self.assertEqual(result["color"], "Black")
+        self.assertEqual(result["amount"], 43)
+        self.assertEqual(result["color"], "Black")
 
     def test_organizer_splits_combined_memory_and_omits_zero_zero(self):
         self.assertEqual(

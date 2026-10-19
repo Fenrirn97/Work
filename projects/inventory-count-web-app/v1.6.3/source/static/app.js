@@ -255,7 +255,8 @@ function hideModelSuggestions() {
 }
 
 function variantDetails(item) {
-  const memory = item.ram && item.storage    ? `${item.ram} RAM · ${item.storage} Storage`
+  const memory = item.ram && item.storage
+    ? `${item.ram} RAM · ${item.storage} Storage`
     : "Non-memory item";
   const sources = Number(item.source_rows || 1);
   const inventory = item.reference_quantity === null || item.reference_quantity === undefined

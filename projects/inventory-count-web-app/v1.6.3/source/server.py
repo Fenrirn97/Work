@@ -95,7 +95,8 @@ def _display_entry(entry: dict[str, Any]) -> dict[str, Any]:
 
 def _state(database_path: Path) -> dict[str, Any]:
     with connect(database_path) as connection:
-        session = current_session(connection)        raw_entries = session_entries(connection, session["id"])
+        session = current_session(connection)
+        raw_entries = session_entries(connection, session["id"])
         identity_counts: dict[str, int] = {}
         for row in raw_entries:
             key = comparison_key(row["model"], row["ram"], row["storage"], row["color"])

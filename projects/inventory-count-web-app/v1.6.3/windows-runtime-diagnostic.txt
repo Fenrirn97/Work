@@ -1,9 +1,0 @@
-Application import failed:
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-    import inventory_app, inventory_app.xlsxio, server; print('App imports OK')
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\a\_temp\inventory-release\Inventory_Count_Web_App\inventory_app\xlsxio.py", line 308
-    model = clean_text(model_value)    ram = _display_memory(ram_value)
-                                       ^^^
-SyntaxError: invalid syntax

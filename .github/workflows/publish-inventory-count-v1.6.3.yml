@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/publish-inventory-count-v1.6.3.yml'
+      - 'projects/inventory-count-web-app/v1.6.3/source/**'
   workflow_dispatch:
 
 permissions:
@@ -54,53 +55,19 @@ jobs:
           & (Join-Path $runtime "python.exe") --version
           if ($LASTEXITCODE -ne 0) { throw "Bundled runtime did not launch." }
 
-      - name: Check Python standard-library imports
+      - name: Validate Python and application imports
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           $python = Join-Path $env:RUNNER_TEMP "inventory-release/Inventory_Count_Web_App/runtime/python.exe"
-          $output = & $python -c "import unittest, sqlite3, urllib, tempfile; print('stdlib imports OK')" 2>&1 | Out-String
-          $code = $LASTEXITCODE
-          Write-Host $output
-          if ($code -ne 0) {
-            $content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("Standard library test failed:`n" + $output))
-            gh api -X PUT "repos/$env:GITHUB_REPOSITORY/contents/projects/inventory-count-web-app/v1.6.3/windows-runtime-diagnostic.txt" -f message="Record Windows embedded Python import diagnostic" -f content="$content" | Out-Null
-            throw "Standard-library imports failed."
-          }
-
-      - name: Check application imports
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $python = Join-Path $env:RUNNER_TEMP "inventory-release/Inventory_Count_Web_App/runtime/python.exe"
-          $output = & $python -c "import inventory_app, inventory_app.xlsxio, server; print('App imports OK')" 2>&1 | Out-String
-          $code = $LASTEXITCODE
-          Write-Host $output
-          if ($code -ne 0) {
-            $content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("Application import failed:`n" + $output))
-            gh api -X PUT "repos/$env:GITHUB_REPOSITORY/contents/projects/inventory-count-web-app/v1.6.3/windows-runtime-diagnostic.txt" -f message="Record Windows embedded Python app import diagnostic" -f content="$content" | Out-Null
-            throw "Application imports failed."
-          }
+          & $python -c "import unittest, sqlite3, urllib, tempfile, inventory_app, inventory_app.xlsxio, server; print('Python and inventory imports OK')"
+          if ($LASTEXITCODE -ne 0) { throw "Bundled Python application imports failed." }
 
       - name: Run inventory regression tests
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           $app = Join-Path $env:RUNNER_TEMP "inventory-release/Inventory_Count_Web_App"
-          $python = Join-Path $app "runtime/python.exe"
-          $output = & $python -m unittest discover -s (Join-Path $app "tests") -p "test_*.py" 2>&1 | Out-String
-          $code = $LASTEXITCODE
-          Write-Host $output
-          if ($code -ne 0) {
-            $diagnostic = "Windows embedded runtime unittest output (latest workflow run):" + [Environment]::NewLine + $output
-            if ($diagnostic.Length -gt 12000) { $diagnostic = $diagnostic.Substring($diagnostic.Length - 12000) }
-            $encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($diagnostic))
-            gh api -X PUT "repos/$env:GITHUB_REPOSITORY/contents/projects/inventory-count-web-app/v1.6.3/windows-test-diagnostic.txt" -f message="Record Windows inventory test diagnostic" -f content="$encoded" | Out-Null
-            throw "Windows inventory regression tests failed."
-          }
+          & (Join-Path $app "runtime/python.exe") -m unittest discover -s (Join-Path $app "tests") -p "test_*.py"
+          if ($LASTEXITCODE -ne 0) { throw "Inventory tests failed." }
 
       - name: Create portable ZIP and checksum
         shell: pwsh

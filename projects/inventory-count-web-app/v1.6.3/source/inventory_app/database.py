@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
     note TEXT NOT NULL,
     occurred_at TEXT NOT NULL
 );
+
 CREATE INDEX IF NOT EXISTS movement_time_idx ON inventory_movements(occurred_at, item_key);
 """
 
