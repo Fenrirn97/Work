@@ -326,6 +326,11 @@ class DatabaseAndHTTPTests(unittest.TestCase):
         init_database(self.database)
 
     def tearDown(self):
+        # sqlite3.Connection context managers commit/rollback but do not close.
+        # Force collection before removing the temporary database on Windows,
+        # where open SQLite handles otherwise block directory deletion.
+        import gc
+        gc.collect()
         self.temp.cleanup()
 
     def test_database_creates_active_session(self):
