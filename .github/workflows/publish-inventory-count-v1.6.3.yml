@@ -1,0 +1,79 @@
+name: Publish Inventory Count v1.6.3 Windows ZIP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-inventory-count-v1.6.3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package-and-release:
+    name: Build, verify, and publish portable Windows package
+    runs-on: windows-latest
+    steps:
+      - name: Check out verified source
+        uses: actions/checkout@v4
+
+      - name: Assemble portable Windows package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $source = Join-Path $env:GITHUB_WORKSPACE "projects/inventory-count-web-app/v1.6.3/source"
+          $base = Join-Path $env:RUNNER_TEMP "inventory-release"
+          $app = Join-Path $base "Inventory_Count_Web_App"
+          New-Item -ItemType Directory -Force -Path $app | Out-Null
+          Copy-Item -Path (Join-Path $source "*") -Destination $app -Recurse -Force
+
+          $download = Join-Path $base "python-3.14.7-embed-amd64.zip"
+          $url = "https://www.python.org/ftp/python/3.14.7/python-3.14.7-embed-amd64.zip"
+          Invoke-WebRequest -Uri $url -OutFile $download
+          $sha = (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = "d297e5ff019966817ad8502465176139f2d3d840fa4ed84b13bed399a6ab1f15"
+          if ($sha -ne $expected) { throw "Official Python runtime checksum verification failed." }
+          $runtime = Join-Path $app "runtime"
+          Expand-Archive -LiteralPath $download -DestinationPath $runtime
+          @(
+            "python314.zip"
+            "."
+            ".."
+            ""
+            "# Embedded runtime for Inventory Count Web App; no third-party libraries."
+          ) | Set-Content -LiteralPath (Join-Path $runtime "python314._pth") -Encoding ascii
+          @(
+            "Inventory Count Web App - Bundled Runtime"
+            "Official CPython 3.14.7 Windows x64 embeddable package."
+            "Keep the runtime folder beside start_app.cmd."
+            "https://www.python.org/downloads/release/python-3147/"
+          ) | Set-Content -LiteralPath (Join-Path $runtime "README.txt") -Encoding ascii
+
+          $python = Join-Path $runtime "python.exe"
+          & $python -m unittest discover -s (Join-Path $app "tests") -p "test_*.py"
+          if ($LASTEXITCODE -ne 0) { throw "Inventory Count tests failed." }
+
+          $zip = Join-Path $env:GITHUB_WORKSPACE "Inventory_Count_Web_App_v1.6.3_Expected_Units.zip"
+          Compress-Archive -LiteralPath $app -DestinationPath $zip -CompressionLevel Optimal -Force
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_ZIP=$zip"
+          $packageSha = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path "$zip.sha256" -Value "$packageSha  Inventory_Count_Web_App_v1.6.3_Expected_Units.zip" -Encoding ascii
+
+      - name: Publish GitHub release and portable ZIP
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "inventory-count-v1.6.3"
+          $asset = $env:RELEASE_ZIP
+          $checksum = "$asset.sha256"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $asset $checksum --clobber --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $tag $asset $checksum --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Inventory Count Web App v1.6.3 - Expected Units" --notes "Portable Windows 10/11 x64 inventory counting app. Extract the ZIP and double-click start_app.cmd. Includes the official Python 3.14.7 embedded runtime, so installing Python is not necessary. Includes Expected Units, Current Count, live Difference, Excel import/organization, and count review. No inventory database or credentials are included."
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Release upload failed." }
+          gh release view $tag --repo $env:GITHUB_REPOSITORY
