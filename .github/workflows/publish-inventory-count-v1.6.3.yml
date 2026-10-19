@@ -18,44 +18,58 @@ jobs:
       - name: Check out verified source
         uses: actions/checkout@v4
 
-      - name: Assemble portable Windows package
+      - name: Copy application source
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $source = Join-Path $env:GITHUB_WORKSPACE "projects/inventory-count-web-app/v1.6.3/source"
-          $base = Join-Path $env:RUNNER_TEMP "inventory-release"
-          $app = Join-Path $base "Inventory_Count_Web_App"
-          New-Item -ItemType Directory -Force -Path $app | Out-Null
+          $app = Join-Path $env:RUNNER_TEMP "inventory-release/Inventory_Count_Web_App"
+          Write-Host "Source: $source"
+          if (!(Test-Path -LiteralPath $source)) { throw "Inventory source directory missing." }
+          New-Item -ItemType Directory -Path $app -Force | Out-Null
           Copy-Item -Path (Join-Path $source "*") -Destination $app -Recurse -Force
+          if (!(Test-Path -LiteralPath (Join-Path $app "server.py"))) { throw "server.py did not copy." }
 
+      - name: Download and verify official Python runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $base = Join-Path $env:RUNNER_TEMP "inventory-release"
           $download = Join-Path $base "python-3.14.7-embed-amd64.zip"
-          $url = "https://www.python.org/ftp/python/3.14.7/python-3.14.7-embed-amd64.zip"
-          Invoke-WebRequest -Uri $url -OutFile $download
+          Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.14.7/python-3.14.7-embed-amd64.zip" -OutFile $download
           $sha = (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant()
           $expected = "d297e5ff019966817ad8502465176139f2d3d840fa4ed84b13bed399a6ab1f15"
+          Write-Host "Official runtime SHA-256: $sha"
           if ($sha -ne $expected) { throw "Official Python runtime checksum verification failed." }
-          $runtime = Join-Path $app "runtime"
-          Expand-Archive -LiteralPath $download -DestinationPath $runtime
-          @(
-            "python314.zip"
-            "."
-            ".."
-            ""
-            "# Embedded runtime for Inventory Count Web App; no third-party libraries."
-          ) | Set-Content -LiteralPath (Join-Path $runtime "python314._pth") -Encoding ascii
-          @(
-            "Inventory Count Web App - Bundled Runtime"
-            "Official CPython 3.14.7 Windows x64 embeddable package."
-            "Keep the runtime folder beside start_app.cmd."
-            "https://www.python.org/downloads/release/python-3147/"
-          ) | Set-Content -LiteralPath (Join-Path $runtime "README.txt") -Encoding ascii
+          Expand-Archive -LiteralPath $download -DestinationPath (Join-Path $base "Inventory_Count_Web_App/runtime")
+          if (!(Test-Path -LiteralPath (Join-Path $base "Inventory_Count_Web_App/runtime/python.exe"))) { throw "Missing embedded python.exe." }
 
-          $python = Join-Path $runtime "python.exe"
-          & $python -m unittest discover -s (Join-Path $app "tests") -p "test_*.py"
-          if ($LASTEXITCODE -ne 0) { throw "Inventory Count tests failed." }
+      - name: Configure Python runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $runtime = Join-Path $env:RUNNER_TEMP "inventory-release/Inventory_Count_Web_App/runtime"
+          @("python314.zip", ".", "..", "", "# Portable runtime; no third-party libraries.") | Set-Content -LiteralPath (Join-Path $runtime "python314._pth") -Encoding ascii
+          @("Inventory Count Web App - Bundled Runtime", "Official CPython 3.14.7 Windows x64 embeddable package.", "Keep the runtime folder beside start_app.cmd.", "https://www.python.org/downloads/release/python-3147/") | Set-Content -LiteralPath (Join-Path $runtime "README.txt") -Encoding ascii
+          & (Join-Path $runtime "python.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "Bundled runtime did not launch." }
 
+      - name: Run inventory regression tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $app = Join-Path $env:RUNNER_TEMP "inventory-release/Inventory_Count_Web_App"
+          & (Join-Path $app "runtime/python.exe") -m unittest discover -s (Join-Path $app "tests") -p "test_*.py"
+          if ($LASTEXITCODE -ne 0) { throw "Inventory Count regression tests failed." }
+
+      - name: Create portable ZIP and checksum
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $app = Join-Path $env:RUNNER_TEMP "inventory-release/Inventory_Count_Web_App"
           $zip = Join-Path $env:GITHUB_WORKSPACE "Inventory_Count_Web_App_v1.6.3_Expected_Units.zip"
           Compress-Archive -LiteralPath $app -DestinationPath $zip -CompressionLevel Optimal -Force
+          if (!(Test-Path -LiteralPath $zip)) { throw "The portable ZIP was not created." }
           Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_ZIP=$zip"
           $packageSha = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           Set-Content -Path "$zip.sha256" -Value "$packageSha  Inventory_Count_Web_App_v1.6.3_Expected_Units.zip" -Encoding ascii
