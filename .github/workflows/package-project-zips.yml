@@ -1,0 +1,143 @@
+name: Package project ZIPs
+
+on:
+  push:
+    paths:
+      - '.github/workflows/package-project-zips.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build project ZIP archives
+        shell: python
+        run: |
+          from pathlib import Path
+          import shutil
+          import tempfile
+          import zipfile
+
+          ROOT = Path.cwd()
+
+          projects = [
+              {
+                  "dir": "projects/amazon-data-extractor/v0.6.3",
+                  "zip": "Amazon_Data_Extractor_v0.6.3.zip",
+                  "bundle": "Amazon_Data_Extractor_v0.6.3_GITHUB_UPLOAD.txt",
+              },
+              {
+                  "dir": "projects/shipstation-excel-export/v1.2.0",
+                  "zip": "ShipStation_Excel_Export_Python_v1.2.0.zip",
+                  "bundle": "ShipStation_Excel_Export_Python_v1.2.0_ALL_CODE.txt",
+              },
+              {
+                  "dir": "projects/shipstation-daily-shipment-check/v0.5.1",
+                  "zip": "ShipStation_Daily_Shipment_Check_v0.5.1_Windows.zip",
+                  "bundle": "ShipStation_Daily_Shipment_Check_v0.5.1_ALL_CODE.txt",
+              },
+              {
+                  "dir": "projects/shipstation-print-time-capture-extension/v0.4.9",
+                  "zip": "ShipStation_Print_Time_Capture_Extension_v0.4.9.zip",
+                  "source": "source",
+              },
+              {
+                  "dir": "projects/inventory-count-web-app/v1.6.3",
+                  "zip": "Inventory_Count_Web_App_v1.6.3_Expected_Units_Source.zip",
+                  "bundle": "Inventory_Count_Web_App_v1.6.3_Expected_Units_ALL_CODE.txt",
+              },
+          ]
+
+          def extract_bundle(bundle_path: Path, destination: Path) -> int:
+              lines = bundle_path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+              current = None
+              collected = []
+              count = 0
+              begin_prefix = "===== BEGIN FILE: "
+              suffix = " ====="
+
+              for line in lines:
+                  stripped = line.rstrip()
+                  if stripped.startswith(begin_prefix) and stripped.endswith(suffix):
+                      current = stripped[len(begin_prefix):-len(suffix)].strip()
+                      collected = []
+                      continue
+
+                  if current and stripped == f"===== END FILE: {current} =====":
+                      target = destination / current
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      target.write_text("".join(collected), encoding="utf-8", newline="")
+                      current = None
+                      collected = []
+                      count += 1
+                      continue
+
+                  if current:
+                      collected.append(line)
+
+              return count
+
+          def zip_tree(source: Path, output: Path):
+              output.parent.mkdir(parents=True, exist_ok=True)
+              if output.exists():
+                  output.unlink()
+              with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+                  for path in sorted(source.rglob("*")):
+                      if not path.is_file():
+                          continue
+                      if path.name.endswith(".zip"):
+                          continue
+                      rel = path.relative_to(source)
+                      if any(part in {".git", "__pycache__", ".venv"} for part in rel.parts):
+                          continue
+                      zf.write(path, rel.as_posix())
+
+          for project in projects:
+              project_dir = ROOT / project["dir"]
+              output = project_dir / project["zip"]
+              if not project_dir.exists():
+                  raise SystemExit(f"Missing project directory: {project_dir}")
+
+              with tempfile.TemporaryDirectory() as temp_name:
+                  temp = Path(temp_name)
+                  package_root = temp / project_dir.name
+                  package_root.mkdir(parents=True, exist_ok=True)
+
+                  if project.get("bundle"):
+                      bundle = project_dir / project["bundle"]
+                      extracted = extract_bundle(bundle, package_root)
+                      if extracted == 0:
+                          shutil.rmtree(package_root)
+                          source_dir = project_dir / "source"
+                          if source_dir.exists():
+                              shutil.copytree(source_dir, package_root)
+                          else:
+                              shutil.copytree(
+                                  project_dir,
+                                  package_root,
+                                  ignore=shutil.ignore_patterns("*.zip", ".git", "__pycache__", ".venv"),
+                              )
+                  else:
+                      shutil.copytree(project_dir / project["source"], package_root, dirs_exist_ok=True)
+
+                  zip_tree(package_root, output)
+                  print(f"Created {output.relative_to(ROOT)} ({output.stat().st_size} bytes)")
+
+      - name: Commit ZIP archives into their project folders
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add projects/amazon-data-extractor/v0.6.3/Amazon_Data_Extractor_v0.6.3.zip projects/shipstation-excel-export/v1.2.0/ShipStation_Excel_Export_Python_v1.2.0.zip projects/shipstation-daily-shipment-check/v0.5.1/ShipStation_Daily_Shipment_Check_v0.5.1_Windows.zip projects/shipstation-print-time-capture-extension/v0.4.9/ShipStation_Print_Time_Capture_Extension_v0.4.9.zip projects/inventory-count-web-app/v1.6.3/Inventory_Count_Web_App_v1.6.3_Expected_Units_Source.zip
+          if git diff --cached --quiet; then
+            echo "ZIP archives already match the stored source."
+            exit 0
+          fi
+          git commit -m "Add downloadable ZIP archives for archived projects"
+          git push
