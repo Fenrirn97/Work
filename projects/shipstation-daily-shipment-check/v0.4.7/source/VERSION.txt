@@ -1,0 +1,5 @@
+0.4.7
+
+Base: old working v0.4.x ShipStation Daily Shipment Check workflow.
+Change: optional normal-browser Shipments -> Label Printed state/time capture.
+No automated ShipStation login/browser profile is used.

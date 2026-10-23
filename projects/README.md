@@ -19,11 +19,12 @@ Public archive of the work software projects developed and tested in ChatGPT.
 - API credentials are supplied at runtime and are not committed.
 
 ### ShipStation Daily Shipment Check
-- Archived browsable source tree: **v0.5.1**
-- Earlier source baseline: **v0.4.0**
-- Full v0.5.1 source is under `projects/shipstation-daily-shipment-check/v0.5.1/source/`.
-- [Download ShipStation Daily Shipment Check v0.5.1 ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.5.1/ShipStation_Daily_Shipment_Check_v0.5.1_Windows.zip)
-- Combines ShipStation shipment data, print-status comparison, extension capture integration, and shipment checking.
+- Current date-range variation: **v0.4.7 Date Range**, based on the v0.4.6 normal-browser workflow.
+- [Browse v0.4.7 source](shipstation-daily-shipment-check/v0.4.7/source/).
+- [Download ShipStation Daily Shipment Check v0.4.7 Date Range ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.7/ShipStation_Daily_Shipment_Check_v0.4.7_Date_Range_Windows.zip).
+- Choose From and Through dates; both dates are included, using Ship Date. The same date in both fields produces a single-day report.
+- Includes API/CSV comparison and the v0.4.9 normal-browser extension for displayed print time. Apply the same Ship Date filter in ShipStation and capture each required page.
+- The historical v0.5.1 separate-browser variation and v0.4.0 baseline remain archived. Version numbering reflects separate variations; see the [project guide](shipstation-daily-shipment-check/README.md).
 
 ### ShipStation Print Time Capture Extension
 - Archived browsable source tree: **v0.4.9**
@@ -41,3 +42,4 @@ Public archive of the work software projects developed and tested in ChatGPT.
 ## Security
 
 Do not commit live ShipStation, Bright Data, marketplace, carrier, or other API credentials. Local credential/key files should remain ignored. Test/example keys in the repository are non-production placeholders.
+

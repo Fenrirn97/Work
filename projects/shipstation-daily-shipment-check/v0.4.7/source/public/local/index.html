@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShipStation Daily Shipment Check</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div>
+    <p class="small-title">LOCAL WINDOWS PROGRAM · VERSION 0.4.7 · DATE RANGE</p>
+    <h1>ShipStation Daily Shipment Check</h1>
+    <p>Choose a Ship Date range, compare your shipment records, and include ShipStation’s displayed printed status and time.</p>
+  </div>
+  <button id="exitButton" class="exit-button" type="button">Exit Program</button>
+</header>
+
+<main>
+  <section class="card step-card">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <h2>Choose the Ship Date range</h2>
+      <div class="date-range">
+        <div>
+          <label for="shipDateStart">From date</label>
+          <input id="shipDateStart" name="shipDateStart" type="date" min="2000-01-01" max="2099-12-31" form="reportForm" required>
+        </div>
+        <div>
+          <label for="shipDateEnd">Through date</label>
+          <input id="shipDateEnd" name="shipDateEnd" type="date" min="2000-01-01" max="2099-12-31" form="reportForm" required>
+        </div>
+      </div>
+      <p id="rangeDescription" class="help-text" aria-live="polite"></p>
+      <p class="help-text">Both dates are included. For one day, choose the same date twice. This range uses Ship Date, not the date the label was printed.</p>
+      <p>In ShipStation, apply the <strong>same Ship Date range</strong> to the Shipments view. Then use <strong>Export Shipments → Current View</strong>.</p>
+      <button id="openShipStationButton" class="secondary-button" type="button">Open ShipStation Shipped Page</button>
+      <p id="shipStationMessage" class="help-text">Uses your existing signed-in browser.</p>
+    </div>
+  </section>
+
+  <section class="card step-card">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <h2>Capture ShipStation Label Printed date/time <span class="optional">(recommended for exact print time)</span></h2>
+      <p>The CSV gives us <strong>Label Printed</strong>, but not the displayed print date/time. The included v0.4.9 Edge/Chrome extension reads the <strong>Shipments → Label Printed</strong> cell from the browser session you already use. The CSV/API report also works without the print-time capture.</p>
+      <div class="button-row">
+        <button id="openExtensionFolderButton" class="secondary-button" type="button">Open Extension Folder</button>
+        <button id="refreshCaptureButton" class="secondary-button" type="button">Refresh Capture Status</button>
+        <button id="clearCaptureButton" class="secondary-button" type="button">Clear Capture</button>
+      </div>
+      <p id="captureStatus" class="help-text">No ShipStation print-time rows captured yet.</p>
+      <p class="help-text">Use <strong>Clear Capture</strong> before capturing a different range. Capture every page in that range; the extension reads one page at a time.</p>
+      <p class="help-text"><strong>One-time setup:</strong> Edge → edge://extensions → Developer mode → Load unpacked → select the included <strong>ShipStation_Print_Time_Extension</strong> folder. Then, on ShipStation Shipments, click the extension and choose <strong>Capture this Shipments page</strong>.</p>
+    </div>
+  </section>
+
+  <section class="card step-card">
+    <div class="step-number">3</div>
+    <div class="step-content">
+      <h2>Create the combined report</h2>
+      <form id="reportForm">
+        <label for="credentialsFile">ShipStation API TXT file</label>
+        <input id="credentialsFile" type="file" accept=".txt,text/plain" required>
+
+        <label for="printCsvFile">ShipStation Print Status CSV <span class="optional">(recommended)</span></label>
+        <input id="printCsvFile" type="file" accept=".csv,text/csv">
+        <p class="help-text">CSV results match by exact tracking number. Multiple-package item rows are marked for review; use Tracking Records for each package.</p>
+
+        <div class="carrier-box">
+          <label class="checkbox-label">
+            <input id="checkCarriers" type="checkbox">
+            <span><strong>Check whether packages were actually received by the carrier</strong><br>UPS, FedEx and USPS only. No carrier API keys are needed.</span>
+          </label>
+          <div id="carrierBrowserArea" class="hidden">
+            <label class="checkbox-label small-checkbox">
+              <input id="showCarrierBrowser" type="checkbox" checked>
+              <span>Show the Microsoft Edge / Chrome tracking window while the program checks each package.</span>
+            </label>
+            <p class="help-text">Carrier pages can request human verification. The program does not bypass it; those records are marked for manual checking.</p>
+          </div>
+        </div>
+
+        <button id="reportButton" class="main-button" type="submit">Create Compared Excel Report</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="card status-card">
+    <h2>Program status</h2>
+    <p id="statusMessage">Ready.</p>
+    <div class="progress-track" aria-hidden="true"><div id="progressBar" class="progress-bar"></div></div>
+    <div class="status-grid">
+      <div><span>Section</span><strong id="sectionValue">—</strong></div>
+      <div><span>Progress</span><strong id="pageValue">—</strong></div>
+      <div><span>Estimated time</span><strong id="timeValue">—</strong></div>
+    </div>
+    <div id="summaryBox" class="summary-box hidden"></div>
+  </section>
+
+  <section class="card information-card">
+    <h2>Print checks in the report</h2>
+    <p><strong>Label Printed (CSV):</strong> the original ShipStation Current View export used by the old program.</p>
+    <p><strong>ShipStation Printed Status + Displayed Print Time:</strong> direct capture from Shipments → Label Printed when the optional extension is used.</p>
+    <p><strong>Critical check:</strong> if ShipStation says Printed but the matched shipment has no tracking number, the report flags it.</p>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

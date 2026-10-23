@@ -1,0 +1,23 @@
+Automated validation for version 0.4.7
+
+Python suite: python -m unittest discover -s tests -v
+39 tests cover the prior CSV, print-capture, carrier parser, and workbook behavior,
+plus these changes:
+- Inclusive start/end dates, midnight boundaries, leap day, and year rollover
+- Invalid/reversed ranges and legacy single-day compatibility
+- V1 query bounds and V2 Ship Date filtering
+- One order-history/label pass rather than a full history pass for each day
+- Order quantities not duplicated across dates; all selected ship dates retained
+- HTTP request validation and date range propagation to extraction and workbook
+- Wrong-package matching regression and multiple-package review behavior
+- Compact printed timestamp formats
+
+Browser UI smoke test: python tests/browser_smoke.py
+Uses a local synthetic extractor and a Playwright Chromium browser. It checks
+native date inputs, range payload, downloaded Excel filename/content, blocking
+of reversed dates, single-day output, and browser JavaScript errors.
+
+These are local automated tests with synthetic data. The date-range release has
+not been run against the user's live ShipStation account, and its Windows CMD
+launchers cannot be executed natively in this Linux build environment. The
+launcher/runtime layout and bundled extension are retained from v0.4.6.
