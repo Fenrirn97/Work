@@ -1,0 +1,34 @@
+Automated validation for version 0.4.8
+
+Python suite: python -m unittest discover -s tests -v
+63 tests cover CSV, print capture, carrier parsing, workbook behavior, date ranges,
+and automatic API file selection:
+- Program-folder lookup independent of current working directory
+- Case-insensitive and extensionless names, UTF-8/UTF-16 text
+- Explicit file/folder paths, quotes, relative paths and environment variables
+- Remembered location across restarts, with no credentials in settings/status
+- Rereading changed keys, manual upload override and reset to program folder
+- Ambiguous, missing, invalid, oversized, special and unreadable files
+- Failed settings writes and recovery from damaged settings
+- Cross-origin rejection and preventing static downloads of credential files
+- Inclusive start/end dates, midnight boundaries, leap day, and year rollover
+- Invalid/reversed ranges and legacy single-day compatibility
+- V1 query bounds and V2 Ship Date filtering
+- One order-history/label pass rather than a full history pass for each day
+- Order quantities not duplicated across dates; all selected ship dates retained
+- HTTP request validation and date range propagation to extraction and workbook
+- Wrong-package matching regression and multiple-package review behavior
+- Compact printed timestamp formats
+
+Browser UI smoke test: python tests/browser_smoke.py
+Uses a local synthetic extractor and a Playwright Chromium browser. It checks
+automatic key loading, typing and remembering a custom path, uploaded-file
+override, program-folder reset, missing-file blocking, native date inputs,
+range payload, downloaded Excel filename/content, blocking of reversed dates,
+single-day output, and browser JavaScript errors. Automatic report requests
+must not contain the credential text.
+
+These are local automated tests with synthetic data. This release has
+not been run against the user's live ShipStation account, and its Windows CMD
+launchers cannot be executed natively in this Linux build environment. The
+launcher/runtime layout and bundled extension are retained from v0.4.6.

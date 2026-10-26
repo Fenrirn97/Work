@@ -1,0 +1,14 @@
+Version 0.4.7 — Ship Date ranges
+- From / Through date pickers; both boundary dates included.
+- ISO date-picker input and legacy MM/DD/YYYY input supported.
+- V1 and V2 extraction filter the full range in one report run.
+- Same-date selection and legacy single-date requests remain supported.
+- Reversed and invalid ranges are rejected before extraction.
+- Date range included in Excel filename, worksheet name, summary, and Read Me.
+- Orders spanning multiple shipment dates list all selected Ship Dates once.
+- Tightened package matching to prevent another package on the same order from
+  supplying a printed status or time.
+- Compact ShipStation print timestamp text, including bullet and middle-dot
+  separators, is parsed without substituting capture time.
+- A prematurely closed report stream produces an error instead of silent success.
+- Retains the v0.4.6 normal-browser flow and bundled v0.4.9 extension.

@@ -1,0 +1,8 @@
+
+# VERSION 1 (recommended for the fuller order report)
+API_KEY=replace_with_your_shipstation_v1_key
+API_SECRET=replace_with_your_shipstation_v1_secret
+
+# Do not keep V1 and V2 credentials in the same file.
+# For V2 instead use only:
+# V2_API_KEY=replace_with_your_shipstation_v2_key

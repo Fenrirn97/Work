@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+[Aa][Pp][Ii] [Kk][Ee][Yy]
+[Aa][Pp][Ii] [Kk][Ee][Yy].[Tt][Xx][Tt]
+api_key_location.json

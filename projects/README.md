@@ -19,12 +19,12 @@ Public archive of the work software projects developed and tested in ChatGPT.
 - API credentials are supplied at runtime and are not committed.
 
 ### ShipStation Daily Shipment Check
-- Current date-range variation: **v0.4.7 Date Range**, based on the v0.4.6 normal-browser workflow.
-- [Browse v0.4.7 source](shipstation-daily-shipment-check/v0.4.7/source/).
-- [Download ShipStation Daily Shipment Check v0.4.7 Date Range ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.7/ShipStation_Daily_Shipment_Check_v0.4.7_Date_Range_Windows.zip).
-- Choose From and Through dates; both dates are included, using Ship Date. The same date in both fields produces a single-day report.
-- Includes API/CSV comparison and the v0.4.9 normal-browser extension for displayed print time. Apply the same Ship Date filter in ShipStation and capture each required page.
-- The historical v0.5.1 separate-browser variation and v0.4.0 baseline remain archived. Version numbering reflects separate variations; see the [project guide](shipstation-daily-shipment-check/README.md).
+- Current variation: **v0.4.8 Auto API Key**, based on v0.4.7 Date Range.
+- [Browse v0.4.8 source](shipstation-daily-shipment-check/v0.4.8/source/).
+- [Download ShipStation Daily Shipment Check v0.4.8 ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.8/ShipStation_Daily_Shipment_Check_v0.4.8_Auto_API_Key_Windows.zip).
+- Automatically loads `API key.txt` or `API key` beside `START.cmd`, or uses a file/folder path entered by the user. The location is remembered; credentials are not copied into settings.
+- Includes inclusive From / Through Ship Date selection, API/CSV comparison and the v0.4.9 normal-browser extension for displayed print time.
+- The earlier v0.4.7 date-range package, historical v0.5.1 separate-browser variation and v0.4.0 baseline remain archived. See the [project guide](shipstation-daily-shipment-check/README.md).
 
 ### ShipStation Print Time Capture Extension
 - Archived browsable source tree: **v0.4.9**
@@ -42,4 +42,5 @@ Public archive of the work software projects developed and tested in ChatGPT.
 ## Security
 
 Do not commit live ShipStation, Bright Data, marketplace, carrier, or other API credentials. Local credential/key files should remain ignored. Test/example keys in the repository are non-production placeholders.
+
 

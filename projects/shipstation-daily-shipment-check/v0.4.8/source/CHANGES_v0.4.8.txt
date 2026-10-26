@@ -1,0 +1,10 @@
+Version 0.4.8 — Automatic API file loading
+- Find API key.txt or API key beside START.cmd, ignoring capitalization.
+- Accept a user-supplied file or folder path and remember only that location.
+- Display readiness without returning the API key or secret to the browser.
+- Reread the selected file when creating each report.
+- Keep the file chooser as an explicit per-report override.
+- Reject ambiguous, missing, unreadable, oversized or invalid selections.
+- Preserve inclusive Ship Date ranges, print-time capture and carrier checks.
+- Preserve the short Windows runtime location and bundled v0.4.9 extension.
+- Add filesystem, HTTP and browser tests for automatic credential loading.

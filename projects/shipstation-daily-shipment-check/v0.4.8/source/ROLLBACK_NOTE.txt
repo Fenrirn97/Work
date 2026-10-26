@@ -1,0 +1,5 @@
+This v0.4.8 release adds automatic API file selection to v0.4.7 Date Range,
+retaining the v0.4.6 normal-browser workflow.
+ShipStation opens in the usual browser. The bundled v0.4.9 extension supplies
+displayed print times, and the existing CSV/API workflow remains available.
+The experimental v0.5.0 / v0.5.1 separate-browser reader is not included.

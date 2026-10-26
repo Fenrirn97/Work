@@ -1,0 +1,4 @@
+0.4.8
+
+Automatic API key file loading from the extracted program folder or a user-supplied location.
+Based on v0.4.7 Date Range; includes the normal-browser v0.4.9 extension.
