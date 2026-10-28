@@ -1,0 +1,293 @@
+"""Command-line entry point for the first Amazon extraction workflow."""
+
+
+from __future__ import annotations
+
+
+import argparse
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+from . import __version__
+from .asin_reader import InputWorkbookError, read_asins
+from .brightdata_client import BrightDataClient, BrightDataError, SnapshotProgress
+from .exporter import write_outputs
+from .credentials import KeyConfigurationError, load_api_key
+
+
+DEFAULT_API_KEY_FILE = Path("brightdata_api_key.txt")
+
+
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="amazon-data-extractor",
+        description="Read ASINs from Excel and collect current Amazon data through Bright Data.",
+    )
+    parser.add_argument(
+        "input_file",
+        type=Path,
+        nargs="?",
+        help="Path to an .xlsx/.xlsm ASIN workbook or Amazon Category Listings Report",
+    )
+    parser.add_argument("--sheet", help="Worksheet to read (default: auto-detect the data sheet)")
+    parser.add_argument("--column", help="ASIN column name (default: auto-detect)")
+    parser.add_argument("--header-row", type=int, default=None, help="Header row number (default: auto-detect)")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output"),
+        help="Parent output directory (default: output)",
+    )
+    parser.add_argument("--language", default="EN", help="Amazon language (default: EN)")
+    parser.add_argument("--zipcode", help="Optional ZIP code for location-specific results")
+    parser.add_argument(
+        "--api-key-file",
+        type=Path,
+        default=DEFAULT_API_KEY_FILE,
+        help="Read the API key from this TXT file (relative paths use the program folder)",
+    )
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Use Bright Data's synchronous request (maximum 20 ASINs)",
+    )
+    parser.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=10.0,
+        help="Seconds between progress checks (default: 10)",
+    )
+    parser.add_argument(
+        "--timeout-minutes",
+        type=float,
+        default=60.0,
+        help="Maximum wait time in minutes (default: 60)",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Validate Excel without calling Bright Data")
+    parser.add_argument("--yes", action="store_true", help="Skip the submission confirmation")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    return parser
+
+
+
+
+def _confirm_submission(count: int) -> bool:
+    print()
+    print(f"ASINs to submit: {count}")
+    print(f"Estimated successfully delivered records: about {count}")
+    answer = input("Submit this batch to Bright Data? [y/N]: ").strip().lower()
+    return answer in {"y", "yes"}
+
+
+
+
+def _save_initial_metadata(run_dir: Path, metadata: dict[str, object]) -> Path:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    metadata_path = run_dir / "run_metadata.json"
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return metadata_path
+
+
+
+
+def _append_error_log(
+    output_dir: Path,
+    *,
+    run_name: str,
+    input_file: Path,
+    asin_count: int,
+    error: BaseException,
+) -> Path:
+    """Append a safe, timestamped failure entry to the persistent error log."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    log_path = output_dir / "errors.txt"
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    error_text = str(error).strip() or error.__class__.__name__
+    entry = (
+        f"[{timestamp}] UTC\n"
+        f"Run: {run_name}\n"
+        f"Input workbook: {input_file}\n"
+        f"ASINs: {asin_count}\n"
+        f"Error: {error_text}\n"
+        + "-" * 72
+        + "\n"
+    )
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(entry)
+    return log_path
+
+
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+
+
+    if args.input_file is None:
+        entered_path = input("Path to the ASIN workbook or Category Listings Report (.xlsx/.xlsm): ").strip().strip('"')
+        if not entered_path:
+            print("No input workbook was provided.", file=sys.stderr)
+            return 2
+        args.input_file = Path(entered_path)
+
+
+    try:
+        read_result = read_asins(
+            args.input_file,
+            sheet_name=args.sheet,
+            column_name=args.column,
+            header_row=args.header_row,
+        )
+    except InputWorkbookError as exc:
+        print(f"Input error: {exc}", file=sys.stderr)
+        return 2
+
+
+    print(f"Worksheet: {read_result.sheet_name}")
+    print(f"ASIN column: {read_result.column_name}")
+    print(f"Input format: {read_result.input_kind}; header row: {read_result.header_row}")
+    print(f"Valid unique ASINs: {len(read_result.asins)}")
+    print(f"Duplicates skipped: {read_result.duplicate_count}")
+    print(f"Invalid rows skipped: {read_result.invalid_count}")
+    print(f"Parent rows skipped: {read_result.parent_count}")
+
+
+    if not read_result.asins:
+        print("No valid ASINs were found; nothing was submitted.", file=sys.stderr)
+        return 2
+
+
+    if args.dry_run:
+        print("Dry run complete. Bright Data was not called and no records were used.")
+        return 0
+
+
+    if not args.yes and not _confirm_submission(len(read_result.asins)):
+        print("Canceled. Bright Data was not called.")
+        return 0
+
+
+    project_dir = (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
+                   else Path(__file__).resolve().parents[2])
+    try:
+        api_key = load_api_key(project_dir, key_file=args.api_key_file)
+    except KeyConfigurationError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if not api_key:
+        print("No API key configured. Open the API key TXT file, replace its placeholder "
+              "with your key, save, and try again. Bright Data was not called.", file=sys.stderr)
+        return 2
+
+
+    started_at = datetime.now(timezone.utc)
+    run_name = f"amazon_extraction_{started_at.strftime('%Y%m%d_%H%M%S')}"
+    run_dir = args.output_dir / run_name
+    client = BrightDataClient(api_key)
+
+
+    try:
+        if args.sync:
+            print("Submitting synchronous request...")
+            snapshot_id = None
+            records = client.collect_sync(read_result.asins)
+        else:
+            print("Submitting asynchronous batch...")
+            snapshot_id = client.trigger_collection(
+                read_result.asins,
+                language=args.language,
+                zipcode=args.zipcode,
+            )
+        metadata: dict[str, object] = {
+            "schema_version": "1.0",
+            "application_version": __version__,
+            "started_at_utc": started_at.isoformat(),
+            "source_workbook": args.input_file.name,
+            "source_worksheet": read_result.sheet_name,
+            "source_asin_column": read_result.column_name,
+            "source_header_row": read_result.header_row,
+            "source_data_start_row": read_result.data_start_row,
+            "source_input_kind": read_result.input_kind,
+            "submitted_asin_count": len(read_result.asins),
+            "invalid_row_count": read_result.invalid_count,
+            "duplicate_row_count": read_result.duplicate_count,
+            "parent_row_count": read_result.parent_count,
+            "dataset_id": client.dataset_id,
+            "snapshot_id": snapshot_id or "",
+            "all_variations": False,
+            "language": args.language.upper(),
+            "zipcode": args.zipcode or "",
+            "status": "collected" if args.sync else "submitted",
+        }
+        metadata_path = _save_initial_metadata(run_dir, metadata)
+        if snapshot_id:
+            print(f"Snapshot ID: {snapshot_id}")
+        else:
+            print("Synchronous response received.")
+        print(f"Recovery information saved to: {metadata_path.resolve()}")
+
+
+        def show_progress(progress: SnapshotProgress) -> None:
+            print(f"Bright Data status: {progress.status}")
+
+
+        if snapshot_id:
+            client.wait_until_ready(
+                snapshot_id,
+                poll_interval=args.poll_seconds,
+                timeout_seconds=args.timeout_minutes * 60,
+                on_progress=show_progress,
+            )
+            print("Downloading completed snapshot...")
+            records = client.download_results(snapshot_id)
+
+
+        completed_at = datetime.now(timezone.utc)
+        metadata.update(
+            {
+                "completed_at_utc": completed_at.isoformat(),
+                "duration_seconds": round((completed_at - started_at).total_seconds(), 3),
+                "returned_record_count": len(records),
+                "error_record_count": sum(bool(record.get("error")) for record in records),
+                "warning_record_count": sum(bool(record.get("warning")) for record in records),
+                "status": "completed",
+            }
+        )
+        raw_path, workbook_path, _ = write_outputs(
+            run_dir,
+            records=records,
+            audit_rows=read_result.audit_rows,
+            metadata=metadata,
+        )
+        print(f"Returned records: {len(records)}")
+        print(f"Excel workbook: {workbook_path.resolve()}")
+        print(f"Untouched JSON: {raw_path.resolve()}")
+        return 0
+    except BrightDataError as exc:
+        error_log = _append_error_log(
+            args.output_dir,
+            run_name=run_name,
+            input_file=args.input_file,
+            asin_count=len(read_result.asins),
+            error=exc,
+        )
+        print(f"Bright Data error: {exc}", file=sys.stderr)
+        print(f"Error log: {error_log.resolve()}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nStopped by user. Any displayed snapshot ID remains available in Bright Data.", file=sys.stderr)
+        return 130
+
+
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

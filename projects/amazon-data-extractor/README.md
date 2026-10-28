@@ -1,40 +1,44 @@
 # Amazon Data Extractor
 
-Current public package: **v0.6.3.2 — editable API-key TXT included**.
+Current public package: **v0.6.3.3 — Category Listings input**.
 
-- [Download the complete ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/amazon-data-extractor/v0.6.3.2/Amazon_Data_Extractor_v0.6.3.2.zip)
-- [Browse current source](v0.6.3.2/source/)
-- [Release notes](v0.6.3.2/README.md)
-- [SHA-256 checksum](v0.6.3.2/SHA256SUMS.txt)
+- [Download ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/amazon-data-extractor/v0.6.3.3/Amazon_Data_Extractor_v0.6.3.3.zip)
+- [Browse source](v0.6.3.3/source/)
+- [Release notes](v0.6.3.3/README.md)
+- [SHA-256 checksum](v0.6.3.3/SHA256SUMS.txt)
 
 ## Use
 
-1. Extract the entire ZIP into a new folder.
-2. Open the supplied `brightdata_api_key.txt` beside `app.py` in Notepad.
-3. Replace `PASTE_YOUR_BRIGHTDATA_API_KEY_HERE` with only your Bright Data
-   account API key, on one line, and save.
-4. Double-click `START.bat`. Python 3.11+ is required; first setup needs internet.
-5. Open `http://127.0.0.1:5050` if the browser does not open automatically.
+1. Extract the complete ZIP into a new folder.
+2. Open the supplied `brightdata_api_key.txt` beside `app.py`; replace its
+   placeholder with your own Bright Data account key and save.
+3. Run `START.bat`. Python 3.11+ is required; first setup needs internet.
+4. In Live Extraction, upload an ordinary ASIN list or Amazon Category Listings
+   Report in `.xlsx` or `.xlsm` format.
 
-The user supplies the real key privately; no shared account key is included.
-The program reloads the TXT file before each live extraction and does not
-overwrite an existing file. An unchanged placeholder blocks live requests.
-Offline Compare works without a key. An existing `BRIGHTDATA_API_KEY`
-environment variable takes priority over the TXT file.
+The program detects the data sheet/header, reads an ASIN/Child ASIN column or
+Product Id values marked ASIN, skips Amazon's reserved template/example rows,
+deduplicates requests and excludes explicit parent listings. UPC/EAN/GTIN-only
+or conflicting identifiers are not guessed. Skipped rows retain their SKU,
+identifier type, source field and row in Input Audit and the result preview.
+One detected data sheet is read, not every helper/validation sheet. The first
+50 rows and 2,048 columns are scanned for headers; CLI overrides remain.
 
-The app retains live extraction, catalog/offline comparison, ASIN handling,
-bullet/image checks and Excel reporting from the archived baseline. The
-v0.6.3.1 startup fixes are included. All 32 offline tests passed on Linux/Python
-3.12.14; live Bright Data access and native Windows launchers remain unverified.
+Source workbooks are not modified and macros are not executed. Automatic mode
+uses sync for up to 20 unique ASINs and async for larger input. No usable ASINs
+means no provider request. Offline Compare remains unchanged.
 
-## Source and security
+## Key file and safety
 
-The ZIP includes the editable `brightdata_api_key.txt` with a placeholder.
-Public source contains only `brightdata_api_key.example.txt`; setup or the
-first page load creates the ignored editable file if it is missing. Packaging
-always generates the ZIP's key TXT from the safe example, never from a local
-credential file. The real key is plain text on the user's computer: do not
-commit or share the populated file, private workbooks or output folders.
+The ZIP contains an editable placeholder TXT, not a shared working key. Public
+source tracks only `brightdata_api_key.example.txt`; setup or the loader safely
+creates a missing editable file. Existing key files are never overwritten by
+the app. An environment `BRIGHTDATA_API_KEY` takes priority. Keep populated TXT
+files, private reports and output local; the TXT is not encrypted.
 
-[v0.6.3.1](v0.6.3.1/) and [v0.6.3](v0.6.3/) remain unchanged for history.
-Use the current ZIP for a fresh installation.
+All 51 offline tests passed, including both report formats, reserved-example
+skipping, barcode rejection and a 25-ASIN async simulation. Live Bright Data
+account access and native Windows launchers remain unverified.
+
+The [v0.6.3.2 key-template patch](v0.6.3.2/), [v0.6.3.1 startup fix](v0.6.3.1/)
+and [v0.6.3 baseline](v0.6.3/) remain available without changes.

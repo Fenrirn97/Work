@@ -5,11 +5,11 @@ Public archive of the work software projects developed and tested in ChatGPT.
 ## Projects
 
 ### Amazon Data Extractor
-- Archived source tree: **v0.6.3.2**
+- Archived source tree: **v0.6.3.3**
 - Python / Flask / Bright Data / Excel
-- Full browsable source is under `projects/amazon-data-extractor/v0.6.3.2/source/`.
-- [Download Amazon Data Extractor v0.6.3.2 ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/amazon-data-extractor/v0.6.3.2/Amazon_Data_Extractor_v0.6.3.2.zip)
-- Includes the startup fixes and a preset editable API-key TXT in the ZIP; 32 offline tests passed. Earlier versions remain available for history.
+- Full browsable source is under `projects/amazon-data-extractor/v0.6.3.3/source/`.
+- [Download Amazon Data Extractor v0.6.3.3 ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/amazon-data-extractor/v0.6.3.3/Amazon_Data_Extractor_v0.6.3.3.zip)
+- Accepts .xlsx/.xlsm Category Listings Reports directly in Live Extraction, keeps the editable key TXT, and passes 51 offline tests. Earlier versions remain available for history.
 - The ZIP's `brightdata_api_key.txt` contains only a placeholder for the user to replace. Populated credential files must remain local and are ignored by the source tree.
 
 ### ShipStation Excel Export
@@ -43,6 +43,7 @@ Public archive of the work software projects developed and tested in ChatGPT.
 ## Security
 
 Do not commit live ShipStation, Bright Data, marketplace, carrier, or other API credentials. Local credential/key files should remain ignored. Test/example keys in the repository are non-production placeholders.
+
 
 
 

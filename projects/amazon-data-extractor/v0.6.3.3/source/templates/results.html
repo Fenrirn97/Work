@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Live Extraction Complete{% endblock %}
+{% block content %}
+<section class="result-heading">
+  <div>
+    <p class="eyebrow">LIVE EXTRACTION COMPLETE</p>
+    <h1>{{ asin_count }} requested ASINs processed</h1>
+    <p>{{ source_workbook }} · {{ mode|capitalize }} mode · {{ record_count }} returned records</p>
+  </div>
+  <a class="button button-secondary" href="{{ url_for('index', tab='offline') }}">Go to Offline Compare</a>
+</section>
+
+<section class="stat-grid">
+  {% for label in ['Found', 'Redirected', 'Not Found', 'Extraction Failed'] %}
+    <div class="stat-card">
+      <span>{{ label }}</span>
+      <strong>{{ live_summary.counts.get(label, 0) }}</strong>
+    </div>
+  {% endfor %}
+  <div class="stat-card"><span>Rows without usable ASINs</span><strong>{{ invalid_count }}</strong></div>
+  <div class="stat-card"><span>Parent rows skipped</span><strong>{{ parent_count }}</strong></div>
+  <div class="stat-card"><span>Duplicates removed</span><strong>{{ duplicate_count }}</strong></div>
+</section>
+
+<section class="card">
+  <h2>Downloads</h2>
+  <div class="download-row">
+    <a class="button button-primary" href="{{ url_for('download', run_name=run_name, kind='excel') }}">Download {{ workbook_name }}</a>
+    <a class="button button-secondary" href="{{ url_for('download', run_name=run_name, kind='json') }}">Raw JSON</a>
+    <a class="button button-secondary" href="{{ url_for('download', run_name=run_name, kind='metadata') }}">Run metadata</a>
+  </div>
+  <p class="note">Use {{ workbook_name }} in the Offline Compare tab. The original requested ASINs are retained in its Input Audit sheet.</p>
+</section>
+
+<p class="note">Input: {{ input_kind }}. Worksheet: {{ sheet_name }}.
+Detected header row: {{ header_row }}. The complete row audit is in the downloaded workbook.</p>
+
+{% if input_issues %}
+<section class="card">
+  <h2>Input rows not submitted separately</h2>
+  <p>{{ input_issue_count }} skipped or duplicate rows. Showing up to 100; see Input Audit for all rows.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Source row</th><th>SKU</th><th>Identifier type</th><th>Status</th><th>Reason</th></tr></thead>
+    <tbody>{% for row in input_issues %}
+      <tr><td>{{ row.source_row }}</td><td>{{ row.source_sku }}</td><td>{{ row.identifier_type }}</td><td>{{ row.status }}</td><td>{{ row.message }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
+{% if live_summary.problems %}
+<section class="card">
+  <h2>Live extraction problems</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Requested ASIN</th><th>Returned ASIN</th><th>Status</th><th>What happened</th></tr></thead>
+      <tbody>
+      {% for product in live_summary.problems %}
+        <tr><td>{{ product.requested_asin }}</td><td>{{ product.returned_asin or '—' }}</td><td>{{ product.status }}</td><td>{{ product.message }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if preview %}
+<section class="card">
+  <h2>Preview</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>ASIN</th><th>Title</th><th>Price</th><th>Availability</th><th>Seller</th></tr></thead>
+      <tbody>
+      {% for item in preview %}
+        <tr><td>{{ item.asin }}</td><td>{{ item.title }}</td><td>{{ item.price }}</td><td>{{ item.availability }}</td><td>{{ item.seller }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
