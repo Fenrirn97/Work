@@ -1,5 +1,7 @@
 # ShipStation Daily Shipment Check v0.4.9 — Voided Labels
 
+**Windows startup fix available:** [v0.4.9.1](../v0.4.9.1/README.md) uses a short SSC folder and checks for long paths or missing files before loading the program. The same archive password applies.
+
 [Download the password-protected Windows ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.9/ShipStation_v0.4.9_Voided_Labels_Protected.zip) · [SHA-256](SHA256SUMS.txt)
 
 ## What changed

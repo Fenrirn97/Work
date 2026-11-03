@@ -20,14 +20,14 @@ Public archive of the work software projects developed and tested in ChatGPT.
 - API credentials are supplied at runtime and are not committed.
 
 ### ShipStation Daily Shipment Check
-- Current variation: **v0.4.9 Voided Labels**, based on v0.4.8 Auto API Key.
-- [Download the protected Windows ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.9/ShipStation_v0.4.9_Voided_Labels_Protected.zip).
-- [Release notes and setup](shipstation-daily-shipment-check/v0.4.9/README.md). The updated source is inside the encrypted archive; the ZIP password is shared separately.
-- Adds Voided & Replacement Labels and Related Label History Excel sheets. Uses the selected range for Void Date and checks related labels across all dates.
-- Reports replacement candidates conservatively and attaches only the candidate's own exact-tracking print observations. Missing or ambiguous evidence requires review.
-- Preserves automatic local API-file selection, inclusive Ship Date ranges, API/CSV comparison, the normal-browser extension, and optional carrier checks.
-- Passed 94 Python tests and the browser workflow with synthetic data. Live-account and native Windows validation remain pending.
-- Earlier versions remain archived. See the [project guide](shipstation-daily-shipment-check/README.md).
+- Current variation: **v0.4.9.1 Startup Fix**, based on v0.4.9 Voided Labels.
+- [Download the protected Windows ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.9.1/ShipStation_0491_Protected.zip).
+- Extract the complete archive directly into Documents and open its short **SSC** folder, outside older version folders.
+- Startup checks folder depth and required files before importing the app. Missing files produce recovery instructions.
+- Preserves void/replacement audit, exact candidate print evidence, inclusive date ranges, automatic API-file selection and the normal-browser extension.
+- [Release notes and setup](shipstation-daily-shipment-check/v0.4.9.1/README.md). Source is inside the protected archive. The same separately supplied v0.4.9 password applies.
+- Passed 101 Python tests, fresh-archive import/startup checks, and the browser workflow with synthetic data. Live-account and native Windows validation remain pending.
+- [Project guide and earlier versions](shipstation-daily-shipment-check/README.md).
 
 ### ShipStation Print Time Capture Extension
 - Archived browsable source tree: **v0.4.9**
