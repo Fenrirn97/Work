@@ -20,12 +20,14 @@ Public archive of the work software projects developed and tested in ChatGPT.
 - API credentials are supplied at runtime and are not committed.
 
 ### ShipStation Daily Shipment Check
-- Current variation: **v0.4.8 Auto API Key**, based on v0.4.7 Date Range.
-- [Browse v0.4.8 source](shipstation-daily-shipment-check/v0.4.8/source/).
-- [Download ShipStation Daily Shipment Check v0.4.8 ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.8/ShipStation_Daily_Shipment_Check_v0.4.8_Auto_API_Key_Windows.zip).
-- Automatically loads `API key.txt` or `API key` beside `START.cmd`, or uses a file/folder path entered by the user. The location is remembered; credentials are not copied into settings.
-- Includes inclusive From / Through Ship Date selection, API/CSV comparison and the v0.4.9 normal-browser extension for displayed print time.
-- The earlier v0.4.7 date-range package, historical v0.5.1 separate-browser variation and v0.4.0 baseline remain archived. See the [project guide](shipstation-daily-shipment-check/README.md).
+- Current variation: **v0.4.9 Voided Labels**, based on v0.4.8 Auto API Key.
+- [Download the protected Windows ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.9/ShipStation_v0.4.9_Voided_Labels_Protected.zip).
+- [Release notes and setup](shipstation-daily-shipment-check/v0.4.9/README.md). The updated source is inside the encrypted archive; the ZIP password is shared separately.
+- Adds Voided & Replacement Labels and Related Label History Excel sheets. Uses the selected range for Void Date and checks related labels across all dates.
+- Reports replacement candidates conservatively and attaches only the candidate's own exact-tracking print observations. Missing or ambiguous evidence requires review.
+- Preserves automatic local API-file selection, inclusive Ship Date ranges, API/CSV comparison, the normal-browser extension, and optional carrier checks.
+- Passed 94 Python tests and the browser workflow with synthetic data. Live-account and native Windows validation remain pending.
+- Earlier versions remain archived. See the [project guide](shipstation-daily-shipment-check/README.md).
 
 ### ShipStation Print Time Capture Extension
 - Archived browsable source tree: **v0.4.9**
@@ -43,8 +45,3 @@ Public archive of the work software projects developed and tested in ChatGPT.
 ## Security
 
 Do not commit live ShipStation, Bright Data, marketplace, carrier, or other API credentials. Local credential/key files should remain ignored. Test/example keys in the repository are non-production placeholders.
-
-
-
-
-

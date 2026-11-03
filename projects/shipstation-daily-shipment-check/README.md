@@ -1,41 +1,44 @@
 # ShipStation Daily Shipment Check
 
-The current variation is **v0.4.8 Auto API Key**, based on v0.4.7 Date Range. It combines ShipStation API records, an optional Shipments status CSV, displayed print-time capture, and optional public UPS/FedEx/USPS tracking checks in an Excel report.
+The current variation is **v0.4.9 Voided Labels**, based on v0.4.8 Auto API Key. It combines shipment records, optional CSV and browser print observations, optional carrier checks, and a read-only void/replacement-label audit in one Excel workbook.
 
-[Download v0.4.8 for Windows](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.8/ShipStation_Daily_Shipment_Check_v0.4.8_Auto_API_Key_Windows.zip) · [Browse source](v0.4.8/source/) · [Full instructions](v0.4.8/source/README.txt) · [Checksums](v0.4.8/SHA256SUMS.txt)
+[Download v0.4.9 protected ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/shipstation-daily-shipment-check/v0.4.9/ShipStation_v0.4.9_Voided_Labels_Protected.zip) · [Setup and release notes](v0.4.9/README.md) · [Checksum](v0.4.9/SHA256SUMS.txt)
+
+The updated source and tests are inside the password-protected archive. Obtain the password separately from the project owner.
 
 ## Run the program
 
-1. Close any older copy and extract the ZIP into a new folder.
-2. Put your existing API text file beside `START.cmd` and name it **API key.txt**. A file named **API key** without an extension also works.
-3. Run `START.cmd`. The API area shows **Ready** when the file is found and its format is valid.
-4. Choose **From date** and **Through date**. Both dates are included, using **Ship Date**. Select the same date twice for one day.
-5. Apply the same Ship Date range in ShipStation. Export the status CSV if needed. For displayed print time, clear the previous capture and use the included extension on every required page.
-6. Click **Create Compared Excel Report**.
+1. Close any older copy and extract the ZIP into a new folder with an AES-compatible tool such as 7-Zip.
+2. Put your existing API text file beside **START.cmd** and name it **API key.txt**. A file named **API key** without an extension also works.
+3. Run **START.cmd**. The API area shows **Ready** when the file is found and its format is valid.
+4. Choose **From date** and **Through date**. Both dates are included. The main shipment report uses Ship Date; the new void sheet uses Void Date.
+5. Apply the desired Ship Date filter in ShipStation. Export the status CSV if needed. For displayed print time, use the included extension on every required page, including candidate replacement labels outside the selected dates.
+6. Click **Create Compared Excel Report**. Review **Voided & Replacement Labels**, **Related Label History**, and their coverage notices.
 
-If the API file is elsewhere, open **Use a different location or choose a file**, paste the file or folder path, and click **Use this location**. The program remembers the location on this Windows account. Only the path is saved. **Use program folder** resets this choice.
+If the API file is elsewhere, open **Use a different location or choose a file**, enter its file or folder path, and click **Use this location**. Only the selected path is saved. A manually selected file overrides automatic loading for that report. The program does not search the entire PC or subfolders.
 
-A file selected with the file chooser overrides automatic loading for that report. Folder lookup is limited to that folder, without searching the PC or subfolders. Ambiguous or invalid selections produce a message instead of silently switching keys. Readiness checks the file format; ShipStation validates the credentials when a report runs.
+The workbook downloads through the browser to its configured download folder, usually Downloads.
 
-The Excel file downloads through the browser to its configured download folder, usually Downloads. Range filenames look like `Shipped_2026-09-29_to_2026-10-02_Checked.xlsx`.
+## Replacement and print evidence
 
-## Requirements and limits
+Related labels are read across all dates and linked through internal IDs. A compatible single label is reported as a **candidate**, not a confirmed replacement relationship. Multiple packages, missing links, reused tracking and incomplete lookups require review. A voided label does not mean its order was canceled.
 
-Windows 10/11 and Python 3.11 or newer are required. The ZIP contains source and launchers; the launcher installs dependencies on first run. See the [full instructions](v0.4.8/source/README.txt) for key-file format, extension setup and carrier support.
+Only the candidate's own exact tracking observation can supply its printed status/time. Blank, unreadable, conflicting or missing evidence remains **Unknown**. Capture time and displayed print time remain distinct; neither independently proves physical printer completion.
 
-The date controls do not change ShipStation's filters or move the extension through pages. Displayed print time remains separate from capture time and is not independent proof of physical printer completion.
+## Requirements and validation
 
-The package passed **63 Python automated tests and a browser workflow test** with synthetic data. Live ShipStation account validation remains pending. Windows CMD launchers were not executed natively in the Linux build environment. See [TESTING.txt](v0.4.8/source/TESTING.txt) for commands and limits.
+Windows 10/11 and Python 3.11 or newer are required. The ZIP contains source and launchers; dependencies are installed on first run.
+
+The v0.4.9 package passed **94 automated Python tests and the browser workflow with synthetic data**. Live-account validation and native Windows launcher testing remain pending. See the release notes and the archive's README.txt and TESTING.txt for commands, date interpretation and coverage limits.
 
 ## Version archive
 
 | Version | Workflow | Files |
 |---|---|---|
-| **v0.4.8 Auto API Key** | Automatic local API file selection and remembered location, plus Ship Date ranges and the v0.4.9 extension | [ZIP and source](v0.4.8/) |
-| v0.4.7 Date Range | Previous normal-browser variation with inclusive Ship Date ranges | [Archive](v0.4.7/) |
+| **v0.4.9 Voided Labels** | Void Date audit, related history, replacement tracking candidates and exact candidate print evidence | [Protected ZIP and release notes](v0.4.9/) |
+| v0.4.8 Auto API Key | Automatic local API-file selection, remembered location and Ship Date ranges | [Archive](v0.4.8/) |
+| v0.4.7 Date Range | Normal-browser variation with inclusive Ship Date ranges | [Archive](v0.4.7/) |
 | v0.5.1 | Historical experimental separate-browser reader | [Archive](v0.5.1/) |
 | v0.4.0 | Earlier combined-source baseline | [Archive](v0.4.0/) |
 
-Credentials remain local to the user's PC. This public package contains only credential placeholders and synthetic test data.
-
-
+Credentials remain local. This update publishes the protected v0.4.9 package, without its password or unencrypted new source. Older repository history has not been rewritten.
