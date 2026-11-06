@@ -5,12 +5,13 @@ Public archive of the work software projects developed and tested in ChatGPT.
 ## Projects
 
 ### Amazon Data Extractor
-- Archived source tree: **v0.6.3.3**
+- Current download: **v0.6.3.5 — Readable Excel Export**
 - Python / Flask / Bright Data / Excel
-- Full browsable source is under `projects/amazon-data-extractor/v0.6.3.3/source/`.
-- [Download Amazon Data Extractor v0.6.3.3 ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/amazon-data-extractor/v0.6.3.3/Amazon_Data_Extractor_v0.6.3.3.zip)
-- Accepts .xlsx/.xlsm Category Listings Reports directly in Live Extraction, keeps the editable key TXT, and passes 51 offline tests. Earlier versions remain available for history.
-- The ZIP's `brightdata_api_key.txt` contains only a placeholder for the user to replace. Populated credential files must remain local and are ignored by the source tree.
+- [Download the password-protected ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/amazon-data-extractor/v0.6.3.5/Amazon_Data_Extractor_v0.6.3.5_Protected.zip)
+- [Release notes and setup](amazon-data-extractor/v0.6.3.5/README.md). The new source is inside the protected archive; the password is supplied separately.
+- Accepts plain TXT ASIN lists and Excel Category Listings Reports. Provides focused title/bullet checks and a full Excel export with a Summary and filterable All Fields.
+- All 70 offline tests passed from the extracted archive. Live Bright Data and native Windows launchers were not tested.
+- The ZIP's `brightdata_api_key.txt` is a placeholder. Keep populated credential files local.
 
 ### ShipStation Excel Export
 - Archived source: **v1.2.0**
