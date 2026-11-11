@@ -37,11 +37,12 @@ Public archive of the work software projects developed and tested in ChatGPT.
 - Captures ShipStation Shipment #, Order #, Tracking #, Label Printed status, and displayed print date/time.
 
 ### Inventory Count Web App
-- Archived browsable source tree: **v1.6.3 — Expected Units**
-- Source is under `projects/inventory-count-web-app/v1.6.3/source/`.
-- A complete source-only `ALL_CODE` bundle is retained alongside the source tree.
-- [Download Inventory Count Web App v1.6.3 source ZIP](https://raw.githubusercontent.com/Fenrirn97/Work/main/projects/inventory-count-web-app/v1.6.3/Inventory_Count_Web_App_v1.6.3_Expected_Units_Source.zip)
-- The bundled portable Python runtime, DLLs, `__pycache__`, and local database/data files are intentionally not committed.
+- Latest version: **v1.6.4 — Google Sheets Memory Extraction**
+- [Download the complete portable Windows ZIP](https://github.com/Fenrirn97/Work/releases/download/inventory-v1.6.4/Inventory_Count_Web_App_v1.6.4_Google_Sheets_Memory.zip)
+- [GitHub Release](https://github.com/Fenrirn97/Work/releases/tag/inventory-v1.6.4)
+- Source under `projects/inventory-count-web-app/v1.6.4/source/`; [project setup and changelog](inventory-count-web-app/README.md).
+- Handles RAM **3–12 GB** and storage **32–512 GB** when importing Google Sheets exported as Excel (.xlsx), plus the v1.6.3 inventory-count features.
+- Passed 24 regression tests on Linux and targeted Windows startup/memory tests. Bundled Python runtime; no separate Python install required.
 
 ## Security
 
