@@ -1,0 +1,81 @@
+name: Publish Inventory Count v1.6.4 Windows ZIP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-inventory-count-v1.6.4.yml'
+      - 'projects/inventory-count-web-app/v1.6.4/source/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-linux:
+    name: Full regression suite on Linux
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: projects/inventory-count-web-app/v1.6.4/source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile and test all inventory code
+        run: |
+          python -m compileall -q inventory_app server.py tests
+          python -m unittest discover -s tests -p 'test_*.py'
+
+  windows-package:
+    name: Validate and publish portable Windows ZIP
+    needs: test-linux
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage source and verify official embedded Python
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = Join-Path $env:RUNNER_TEMP 'inventory-release/Inventory_Count_Web_App'
+          $source = Join-Path $env:GITHUB_WORKSPACE 'projects/inventory-count-web-app/v1.6.4/source'
+          New-Item -ItemType Directory -Force -Path $app | Out-Null
+          Copy-Item -Path (Join-Path $source '*') -Destination $app -Recurse -Force
+          $runtime = Join-Path $app 'runtime'
+          $archive = Join-Path $env:RUNNER_TEMP 'python-3.14.7-embed-amd64.zip'
+          Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.14.7/python-3.14.7-embed-amd64.zip' -OutFile $archive
+          $expected = 'd297e5ff019966817ad8502465176139f2d3d840fa4ed84b13bed399a6ab1f15'
+          $got = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($got -ne $expected) { throw "Embedded Python runtime checksum mismatch: $got" }
+          Expand-Archive -LiteralPath $archive -DestinationPath $runtime
+          @('python314.zip', '.', '..', '', '# Embedded runtime; stdlib only.') | Set-Content -LiteralPath (Join-Path $runtime 'python314._pth') -Encoding ascii
+          @('Inventory Count Web App - Bundled Runtime', 'Official CPython 3.14.7 Windows x64 embeddable package.', 'Keep the runtime folder beside start_app.cmd.', 'https://www.python.org/downloads/release/python-3147/') | Set-Content -LiteralPath (Join-Path $runtime 'README.txt') -Encoding ascii
+          & (Join-Path $runtime 'python.exe') -c "import inventory_app, inventory_app.xlsxio, server; from inventory_app.xlsxio import split_model_memory; assert split_model_memory('Phone 3+32') == ('Phone', '3 GB', '32 GB'); assert split_model_memory('Phone 12GB RAM + 512GB Storage') == ('Phone', '12 GB', '512 GB'); print('Windows application imports and range checks OK')"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows import/range check failed.' }
+          Push-Location $app
+          try {
+            & (Join-Path $runtime 'python.exe') -m unittest discover -s tests -p 'test_*.py' -k IdentityRuleTests
+            if ($LASTEXITCODE -ne 0) { throw 'Windows identity tests failed.' }
+          } finally { Pop-Location }
+          $release = Join-Path $env:GITHUB_WORKSPACE 'Inventory_Count_Web_App_v1.6.4_Google_Sheets_Memory.zip'
+          Compress-Archive -LiteralPath $app -DestinationPath $release -CompressionLevel Optimal -Force
+          $sha = (Get-FileHash -LiteralPath $release -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath "$release.sha256" -Value "$sha  Inventory_Count_Web_App_v1.6.4_Google_Sheets_Memory.zip" -Encoding ascii
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RELEASE_ZIP=$release"
+      - name: Create GitHub release with portable ZIP
+        shell: pwsh
+        env:
+          GH_TOKEN: \${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $asset = $env:RELEASE_ZIP
+          $checksum = "$asset.sha256"
+          gh release view inventory-v1.6.4 --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload inventory-v1.6.4 $asset $checksum --clobber --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create inventory-v1.6.4 $asset $checksum --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --latest --title 'Inventory Count Web App v1.6.4 - Google Sheets Memory' --notes 'Windows 10/11 x64 portable program. Extract ZIP and double-click start_app.cmd; no Python installation required. Improved Google Sheets .xlsx memory extraction (RAM 3-12 GB, storage 32-512 GB, combined and separate columns). Preserves v1.6.3 inventory count features. Local database and credentials are not included.'
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub release upload failed.' }
+          gh release view inventory-v1.6.4 --repo $env:GITHUB_REPOSITORY

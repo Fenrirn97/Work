@@ -1,0 +1,2 @@
+# No third-party packages are required.
+# The app uses only the Python 3 standard library.
